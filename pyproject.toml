@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=64.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ghana-chat"
+version = "0.1.0"
+description = "Head-focused Knowledge Graph Grounded QA powered by Qwen 2B on NVIDIA H200"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Apache-2.0"}
+authors = [{name = "Ghana NLP", email = "info@ghananlp.org"}]
+keywords = ["ghana", "knowledge-graph", "llm", "qwen", "nlp", "grounding", "h200"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "torch>=2.1.0",
+    "transformers>=4.40.0",
+    "accelerate>=0.28.0",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.22.0",
+    "pydantic>=2.0.0",
+    "pandas>=2.0.0",
+    "pyarrow>=14.0.0",
+    "spacy>=3.7.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "httpx>=0.24.0",
+]
+
+[project.scripts]
+ghana-chat = "ghana_chat.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ghana_chat*"]

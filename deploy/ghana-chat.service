@@ -1,0 +1,16 @@
+[Unit]
+Description=Ghana Chat API Service (Qwen 2B on H200)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/mnt/volume_d2wey28/projects/ghana-chat
+ExecStart=/mnt/volume_d2wey28/projects/ghana-chat/.venv/bin/python -m uvicorn ghana_chat.server:app --host 0.0.0.0 --port 8000 --workers 1
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+Environment=CUDA_VISIBLE_DEVICES=0
+
+[Install]
+WantedBy=multi-user.target
