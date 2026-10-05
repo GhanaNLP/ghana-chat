@@ -378,6 +378,24 @@
       margin-bottom: 0;
     }
 
+    /* Loading / retry label */
+    .loading-label {
+      font-size: 0.88rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    /* Error bubble variant */
+    .bubble.is-error {
+      background: #fef6f6;
+      border-color: #f7d4d4;
+    }
+    .bubble.is-error p {
+      color: #a03b3b;
+    }
+
     /* Collapsible Triples Drawer */
     details.facts-drawer {
       margin-top: 0.75rem;
@@ -749,14 +767,36 @@
           conversation_triples: conversationTriples
         };
 
-        const res = await fetch(`${DEFAULT_API}/ask`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+        let res;
+        let lastStatus = 0;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            res = await fetch(`${DEFAULT_API}/ask`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+              signal: controller.signal
+            });
+            lastStatus = res.status;
+            // Retry transient server-side failures (503 warm-up / OOM / generation fault)
+            if (res.status >= 500) throw new Error(`Server returned status ${res.status}`);
+            break;
+          } catch (e) {
+            if (controller.signal.aborted) throw e;
+            if (attempt === 3) throw e;
+            setLoadingLabel(loadingRow, `Connection issue, retrying (${attempt}/3)…`);
+            await new Promise(r => setTimeout(r, 1500 * attempt));
+          }
+        }
+        clearTimeout(timeoutId);
 
         if (!res.ok) {
-          throw new Error(`Server returned status ${res.status}`);
+          throw new Error(lastStatus === 400
+            ? 'That message could not be processed.'
+            : `Server returned status ${lastStatus}`);
         }
 
         const data = await res.json();
@@ -777,11 +817,64 @@
         updateAssistantRow(loadingRow, data);
 
       } catch (err) {
-        updateAssistantRow(loadingRow, 'Sorry, I had trouble reaching my server. Please try again in a moment.');
+        console.error('Chat request failed:', err);
+        const detail = String(err && err.message ? err.message : err);
+        let msg;
+        if (/abort/i.test(detail)) {
+          msg = 'That took too long to answer. Please try again.';
+        } else if (/\b(400)\b/.test(detail)) {
+          msg = 'That message could not be processed. Please rephrase and try again.';
+        } else {
+          msg = 'Sorry, I had trouble reaching my server. Please try again in a moment.';
+        }
+        updateAssistantRow(loadingRow, msg, null, true);
+        // Allow one-click resend of the failed message
+        addRetryButton(loadingRow, message);
       } finally {
         btnSend.disabled = false;
         scrollBottom();
       }
+    }
+
+    function setLoadingLabel(row, text) {
+      const bubble = row.querySelector('.bubble');
+      if (!bubble) return;
+      const typing = bubble.querySelector('.typing-indicator');
+      if (typing) typing.remove();
+      const existing = bubble.querySelector('.loading-label');
+      if (existing) existing.remove();
+      const label = document.createElement('div');
+      label.className = 'loading-label';
+      label.textContent = text;
+      bubble.appendChild(label);
+    }
+
+    function addRetryButton(row, message) {
+      const bubble = row.querySelector('.bubble');
+      if (!bubble) return;
+      const btn = document.createElement('button');
+      btn.className = 'btn-action-icon';
+      btn.style.marginTop = '0.5rem';
+      btn.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="23 4 23 10 17 10"></polyline>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+        </svg>
+        <span>Retry</span>
+      `;
+      btn.addEventListener('click', () => {
+        // Remove the failed user turn so it is not duplicated in history
+        for (let i = chatHistory.length - 1; i >= 0; i--) {
+          if (chatHistory[i].role === 'user' && chatHistory[i].content === message) {
+            chatHistory.splice(i, 1);
+            break;
+          }
+        }
+        row.remove();
+        userInput.value = message;
+        sendMessage();
+      });
+      bubble.appendChild(btn);
     }
 
     function appendMessage(role, text) {
@@ -831,9 +924,10 @@
       return row;
     }
 
-    function updateAssistantRow(row, data) {
+    function updateAssistantRow(row, data, triplesArg, isError) {
       const bubble = row.querySelector('.bubble');
       bubble.innerHTML = '';
+      bubble.classList.toggle('is-error', !!isError);
 
       const answerText = (typeof data === 'string') ? data : (data.answer || '');
 
@@ -851,7 +945,9 @@
       }
 
       // Collapsible Knowledge Facts / Triples Drawer
-      const trs = (typeof data === 'object') ? (data.triples || data.all_triples || []) : [];
+      const trs = (typeof data === 'object' && data !== null)
+        ? (data.triples || data.all_triples || [])
+        : (triplesArg || []);
       if (trs.length > 0) {
         const drawer = document.createElement('details');
         drawer.className = 'facts-drawer';

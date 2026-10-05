@@ -2,8 +2,11 @@
 
 import os
 import time
+import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+
+import torch
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -12,6 +15,8 @@ from pydantic import BaseModel, Field
 from . import __version__, config
 from .retriever import HeadKGRetriever
 from .generator import GroundedGenerator
+
+logger = logging.getLogger("ghana_chat.server")
 
 app = FastAPI(
     title="Ghana Chat API",
@@ -137,17 +142,26 @@ async def ask_question(req: QuestionRequest):
         raise HTTPException(status_code=400, detail="Query message cannot be empty.")
 
     query = query.strip()
-    retriever = get_retriever()
-    generator = get_generator()
+
+    try:
+        retriever = get_retriever()
+        generator = get_generator()
+    except Exception as exc:
+        logger.error("Model warm-up failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=503, detail="Model is still starting up. Please retry.")
 
     # 1. Multi-turn aware retrieval
-    ret_res = retriever.process_turn(
-        query=query,
-        history_entities=req.history_entities,
-        existing_triples=req.conversation_triples,
-        max_triples=req.max_triples or 8,
-        country_filter=req.country_filter
-    )
+    try:
+        ret_res = retriever.process_turn(
+            query=query,
+            history_entities=req.history_entities,
+            existing_triples=req.conversation_triples,
+            max_triples=req.max_triples or 8,
+            country_filter=req.country_filter
+        )
+    except Exception as exc:
+        logger.error("Retrieval failed for %r: %s", query, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Retrieval failed. Please retry.")
 
     active_triples = ret_res.get("active_triples", ret_res["all_triples"])
     all_triples = ret_res["all_triples"]
@@ -164,12 +178,20 @@ async def ask_question(req: QuestionRequest):
         history_dicts = []
 
     # 3. Generate grounded response with Qwen 2B in friendly narrative prose (no think mode)
-    gen_res = generator.generate(
-        query=query,
-        triples=active_triples,
-        history=history_dicts,
-        abbreviations=ret_res.get("abbreviations", [])
-    )
+    try:
+        gen_res = generator.generate(
+            query=query,
+            triples=active_triples,
+            history=history_dicts,
+            abbreviations=ret_res.get("abbreviations", [])
+        )
+    except torch.cuda.OutOfMemoryError as exc:
+        torch.cuda.empty_cache()
+        logger.error("CUDA OOM during generation: %s", exc)
+        raise HTTPException(status_code=503, detail="Server is busy. Please retry in a moment.")
+    except Exception as exc:
+        logger.error("Generation failed for %r: %s", query, exc, exc_info=True)
+        raise HTTPException(status_code=503, detail="Answer generation failed. Please retry.")
 
     return QuestionResponse(
         question=query,
