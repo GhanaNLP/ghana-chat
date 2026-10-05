@@ -41,9 +41,9 @@ class GroundedGenerator:
         triples: List[Dict[str, Any]],
         history: Optional[List[Dict[str, str]]] = None,
         abbreviations: Optional[List[Tuple[str, str]]] = None,
-        max_new_tokens: int = 160
+        max_new_tokens: int = 200
     ) -> Dict[str, Any]:
-        """Construct prompt and generate response directly in friendly narrative prose with think mode disabled."""
+        """Construct prompt and generate concise, natural narrative response without reciting raw ontology relations."""
         facts_text = self.format_triples(triples)
 
         abbrev_section = ""
@@ -54,9 +54,13 @@ class GroundedGenerator:
         system_msg = (
             "You are Ghana Chat, a knowledgeable, professional, and helpful assistant for Ghana.\n\n"
             "Guidelines:\n"
-            "1. Opening: Start your answer by naturally acknowledging that the user has asked an important or good question (for example: 'That is an important question regarding Ghana's governance...', 'You have asked a very good question about...').\n"
-            "2. Tone: Professional, respectful, and direct. Do NOT use roleplay theatrics or refer to yourself as a 'local guide'.\n"
-            "3. Format: Write strictly in flowing narrative prose and natural paragraphs. Do NOT use bullet points, numbered lists, or robotic phrasing like 'A person who...'. Weave the facts smoothly into cohesive sentences.\n"
+            "1. Opening: Start your answer by naturally acknowledging that the user has asked an important or good question about the topic.\n"
+            "2. Natural Narrative Flow: Weave the facts into smooth, engaging, natural narrative prose and well-structured paragraphs. "
+            "CRITICAL: Do NOT mechanically recite knowledge graph relations. Never use artificial ontology phrasing like 'is a subclass of...', "
+            "'is an instance of...', 'is a facet of...', or 'falls under the umbrella of...'. Instead, synthesize what the policy, organization, "
+            "or person actually means and does in practical, real-world terms.\n"
+            "3. Conciseness & Clean Finish: Keep your entire response concise, between 80 to 120 words (around 500 to 600 characters). "
+            "Always complete your final sentence cleanly—never leave a thought unfinished or cut off mid-sentence.\n"
             "4. Grounding: Base everything you say strictly on the Knowledge Graph facts provided below. Never invent, assume, or extrapolate unmentioned facts.\n"
             "5. Missing Information: If the provided facts do not contain the answer, politely inform the user.\n\n"
             f"{abbrev_section}"
