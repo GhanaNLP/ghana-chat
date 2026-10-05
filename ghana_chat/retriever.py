@@ -14,7 +14,15 @@ STOPWORDS = {
     "is", "are", "was", "were", "be", "been", "being", "the", "a", "an",
     "in", "on", "at", "of", "for", "to", "and", "or", "do", "does", "did",
     "can", "you", "give", "please", "with", "from", "by", "that", "this",
-    "these", "those", "have", "has", "had"
+    "these", "those", "have", "has", "had", "which", "its", "their", "his", "her"
+}
+
+# Generic words that often refer back to previously mentioned entities (anaphora)
+GENERIC_ANAPHORA = {
+    "organization", "organisation", "institution", "agency", "commission",
+    "body", "company", "group", "person", "leader", "place", "area", "policy",
+    "document", "plan", "programme", "program", "project", "thing", "service",
+    "council", "ministry", "board", "committee"
 }
 
 _nlp = None
@@ -141,4 +149,93 @@ class HeadKGRetriever:
             "entities": candidates,
             "triples": matched,
             "num_triples": len(matched)
+        }
+
+    def process_turn(
+        self,
+        query: str,
+        history_entities: Optional[List[str]] = None,
+        existing_triples: Optional[List[Dict[str, Any]]] = None,
+        max_triples: int = 8,
+        country_filter: Optional[str] = "Ghana"
+    ) -> Dict[str, Any]:
+        """Multi-turn retrieval processor.
+
+        Checks if the query is a follow-up referencing already established context.
+        - If NO new entities are introduced: returns is_followup=True, no new retrieval.
+        - If NEW entities ARE introduced: retrieves head triples for the new entities
+          and merges them with existing triples.
+        """
+        history_set = set(e.strip().lower() for e in (history_entities or []))
+        existing_list = list(existing_triples or [])
+
+        # Extract candidates from current query
+        query_candidates = self.extract_candidates(query)
+
+        # Filter out candidates that are purely generic anaphora referring back to prior context
+        filtered_candidates = [
+            c for c in query_candidates
+            if c not in GENERIC_ANAPHORA and not (len(c.split()) == 1 and c in GENERIC_ANAPHORA)
+        ]
+
+        # Check for genuinely new entities not already in conversation history
+        new_entities = []
+        for c in filtered_candidates:
+            # Check if this entity or a superstring was already processed
+            already_known = (c in history_set) or any(c in h or h in c for h in history_set)
+            if not already_known:
+                new_entities.append(c)
+
+        # Case A: Pure follow-up within existing context (no new entities introduced)
+        if len(new_entities) == 0 and len(history_set) > 0:
+            return {
+                "query": query,
+                "is_followup": True,
+                "new_entities": [],
+                "all_entities": list(history_set),
+                "new_triples": [],
+                "all_triples": existing_list,
+                "num_triples": len(existing_list)
+            }
+
+        # Case B: First turn or follow-up introducing new entities
+        targets = new_entities if new_entities else query_candidates
+        matched_new = []
+        seen = set((t["head"].lower(), t["relation"].lower(), t["tail"].lower()) for t in existing_list)
+
+        for cand in targets:
+            if cand in self.heads_map:
+                for item in self.heads_map[cand]:
+                    if country_filter and item["country"].lower() != country_filter.lower():
+                        continue
+                    t_key = (item["head"].lower(), item["relation"].lower(), item["tail"].lower())
+                    if t_key not in seen:
+                        seen.add(t_key)
+                        matched_new.append(item)
+                        if len(matched_new) >= max_triples:
+                            break
+            if len(matched_new) >= max_triples:
+                break
+
+        # Fallback if nothing matched and country filter was active
+        if not matched_new and country_filter:
+            return self.process_turn(
+                query=query,
+                history_entities=history_entities,
+                existing_triples=existing_triples,
+                max_triples=max_triples,
+                country_filter=None
+            )
+
+        updated_entities = list(history_set.union(set(targets)))
+        updated_triples = existing_list + matched_new
+
+        return {
+            "query": query,
+            "is_followup": (len(history_set) > 0 and len(new_entities) == 0),
+            "new_entities": new_entities if new_entities else targets,
+            "all_entities": updated_entities,
+            "new_triples": matched_new,
+            "all_triples": updated_triples,
+            "num_triples": len(updated_triples)
         }

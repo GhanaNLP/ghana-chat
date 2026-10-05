@@ -35,34 +35,48 @@ class GroundedGenerator:
         lines = [f"- {t['head']} | {t['relation']} | {t['tail']}" for t in triples]
         return "\n".join(lines)
 
-    def generate(self, question: str, triples: List[Dict[str, Any]], max_new_tokens: int = 150) -> Dict[str, Any]:
-        """Construct prompt and generate response strictly adhering to the facts."""
+    def generate(
+        self,
+        query: str,
+        triples: List[Dict[str, Any]],
+        history: Optional[List[Dict[str, str]]] = None,
+        max_new_tokens: int = 150
+    ) -> Dict[str, Any]:
+        """Construct multi-turn prompt and generate response strictly adhering to the facts."""
         facts_text = self.format_triples(triples)
 
         system_msg = (
             "You are a helpful and factual knowledge assistant for Ghana. "
-            "Answer the user's question using ONLY the provided Knowledge Graph facts below. "
+            "Answer the user's questions using ONLY the provided Knowledge Graph facts below. "
             "Do NOT invent, extrapolate, or hallucinate any facts not explicitly present in the knowledge graph. "
-            "If the provided facts do not contain the answer, say 'Based on the available knowledge graph facts, I do not have information to answer that.'"
+            "If the provided facts do not contain the answer, say 'Based on the available knowledge graph facts, I do not have information to answer that.'\n\n"
+            f"Knowledge Graph Facts:\n{facts_text}"
         )
 
-        user_content = (
-            f"Knowledge Graph Facts:\n{facts_text}\n\n"
-            f"Question: {question}"
-        )
+        full_messages = [{"role": "system", "content": system_msg}]
 
-        messages = [
-            {"role": "system", "content": system_msg},
-            {"role": "user", "content": user_content}
-        ]
+        # Append prior conversation turns if provided
+        if history:
+            for turn in history:
+                if turn.get("role") in ("user", "assistant") and turn.get("content"):
+                    full_messages.append({"role": turn["role"], "content": turn["content"]})
+
+        # Append the latest user query
+        full_messages.append({"role": "user", "content": query})
 
         if hasattr(self.tokenizer, "apply_chat_template") and self.tokenizer.chat_template is not None:
             try:
-                prompt = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+                prompt = self.tokenizer.apply_chat_template(full_messages, tokenize=False, add_generation_prompt=True)
             except Exception:
-                prompt = f"<|im_start|>system\n{system_msg}<|im_end|>\n<|im_start|>user\n{user_content}<|im_end|>\n<|im_start|>assistant\n"
+                prompt = f"<|im_start|>system\n{system_msg}<|im_end|>\n"
+                for m in full_messages[1:]:
+                    prompt += f"<|im_start|>{m['role']}\n{m['content']}<|im_end|>\n"
+                prompt += "<|im_start|>assistant\n"
         else:
-            prompt = f"System: {system_msg}\n\nUser: {user_content}\n\nAssistant:"
+            prompt = f"System: {system_msg}\n\n"
+            for m in full_messages[1:]:
+                prompt += f"{m['role'].capitalize()}: {m['content']}\n\n"
+            prompt += "Assistant:"
 
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
 
