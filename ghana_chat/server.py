@@ -65,6 +65,7 @@ class QuestionRequest(BaseModel):
 class QuestionResponse(BaseModel):
     question: str
     answer: str
+    reasoning: Optional[str] = Field(default="", description="The model's internal step-by-step reasoning process")
     is_followup: bool
     new_entities: List[str]
     all_entities: List[str]
@@ -168,6 +169,7 @@ async def ask_question(req: QuestionRequest):
     return QuestionResponse(
         question=query,
         answer=gen_res["answer"],
+        reasoning=gen_res.get("reasoning", ""),
         is_followup=is_followup,
         new_entities=ret_res["new_entities"],
         all_entities=ret_res["all_entities"],
