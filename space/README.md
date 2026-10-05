@@ -1,11 +1,11 @@
 ---
 title: Ghana Chat
-emoji: 🇬🇭
+emoji: 💬
 colorFrom: green
 colorTo: yellow
 sdk: static
 pinned: false
-short_description: Knowledge Graph Grounded QA powered by Qwen 2B on NVIDIA H200
+short_description: Grounded Ghana QA using Knowledge Graph and Qwen 2B
 ---
 
 # Ghana Chat — Web Interface
