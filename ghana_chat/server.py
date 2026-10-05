@@ -153,8 +153,16 @@ async def ask_question(req: QuestionRequest):
     new_triples = ret_res["new_triples"]
     is_followup = ret_res["is_followup"]
 
-    # 2. Generate grounded response with Qwen 2B in friendly narrative prose
-    history_dicts = [{"role": m.role, "content": m.content} for m in req.history] if req.history else []
+    # 2. Topic-Aware History Filtering:
+    # If this is a FOLLOW-UP (referencing established context), include prior conversation turns.
+    # If this is a NEW TOPIC (new entities introduced), prune previous unrelated turns from the prompt
+    # so unrelated past entities (e.g. Asiedu Nketia) do not contaminate the new topic (e.g. cassava farming).
+    if is_followup and req.history:
+        history_dicts = [{"role": m.role, "content": m.content} for m in req.history]
+    else:
+        history_dicts = []
+
+    # 3. Generate grounded response with Qwen 2B in friendly narrative prose
     gen_res = generator.generate(query=query, triples=active_triples, history=history_dicts)
 
     return QuestionResponse(

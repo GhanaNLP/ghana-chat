@@ -524,7 +524,16 @@
 
         const data = await res.json();
 
-        // Update conversation state
+        // Topic Switch Management:
+        // If a new topic was introduced (is_followup is false), reset backend context to the new topic
+        // while keeping the visible chat bubbles intact on screen.
+        if (!data.is_followup && chatHistory.length > 0) {
+          chatHistory = [];
+          historyEntities = [];
+          conversationTriples = [];
+        }
+
+        // Update conversation state for follow-ups within the active topic
         chatHistory.push({ role: 'user', content: message });
         chatHistory.push({ role: 'assistant', content: data.answer });
         historyEntities = data.all_entities || historyEntities;
