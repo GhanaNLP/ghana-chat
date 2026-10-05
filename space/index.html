@@ -382,11 +382,12 @@
     const endpointInput = document.getElementById('endpoint-input');
 
     // Restore or set backend endpoint
+    const DEFAULT_API = 'https://ghana-chat.ghanaopenai.org';
     const savedEndpoint = localStorage.getItem('ghana_chat_endpoint');
     if (savedEndpoint) {
       endpointInput.value = savedEndpoint;
     } else {
-      endpointInput.value = window.location.origin.includes('http') ? window.location.origin : 'http://localhost:8000';
+      endpointInput.value = DEFAULT_API;
     }
     endpointInput.addEventListener('change', () => {
       localStorage.setItem('ghana_chat_endpoint', endpointInput.value.trim());
