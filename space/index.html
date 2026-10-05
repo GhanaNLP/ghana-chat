@@ -769,7 +769,8 @@
       try {
         const payload = {
           message: message,
-          history: chatHistory
+          history: chatHistory,
+          stream: true
         };
 
         const controller = new AbortController();
@@ -804,7 +805,66 @@
             : `Server returned status ${lastStatus}`);
         }
 
-        const data = await res.json();
+        let data;
+        const contentType = res.headers.get('content-type') || '';
+
+        if (contentType.includes('text/event-stream')) {
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder('utf-8');
+          let buffer = '';
+          let fullAnswer = '';
+          let meta = { sources: [], grounded: true, is_followup: false };
+
+          const bubble = loadingRow.querySelector('.bubble');
+          const typing = bubble ? bubble.querySelector('.typing-indicator') : null;
+          const liveP = document.createElement('p');
+
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            const blocks = buffer.split('\n\n');
+            buffer = blocks.pop(); // keep remainder
+
+            for (const block of blocks) {
+              let eventType = 'message';
+              let dataStr = '';
+              for (const line of block.split('\n')) {
+                if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+                else if (line.startsWith('data: ')) dataStr = line.slice(6);
+              }
+              if (!dataStr) continue;
+
+              try {
+                const parsed = JSON.parse(dataStr);
+                if (eventType === 'meta') {
+                  meta = parsed;
+                } else if (eventType === 'token') {
+                  if (typing && typing.parentNode) typing.remove();
+                  if (bubble && !liveP.parentNode) bubble.appendChild(liveP);
+                  fullAnswer += parsed.token;
+                  liveP.textContent = fullAnswer;
+                  scrollBottom();
+                } else if (eventType === 'error') {
+                  throw new Error(parsed.error || 'Streaming error');
+                }
+              } catch (e) {
+                if (e.message !== 'Streaming error') console.warn('SSE parse error:', e);
+                else throw e;
+              }
+            }
+          }
+
+          data = {
+            answer: fullAnswer,
+            sources: meta.sources || [],
+            grounded: meta.grounded,
+            is_followup: meta.is_followup
+          };
+        } else {
+          data = await res.json();
+        }
 
         // Topic switch management
         if (!data.is_followup && chatHistory.length > 0) {
@@ -814,7 +874,7 @@
         chatHistory.push({ role: 'user', content: message });
         chatHistory.push({ role: 'assistant', content: data.answer });
 
-        // Render Answer
+        // Finalize Render with formatted paragraphs, sources drawer, and copy button
         updateAssistantRow(loadingRow, data);
 
       } catch (err) {

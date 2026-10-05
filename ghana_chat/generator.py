@@ -163,17 +163,16 @@ class GroundedGenerator:
                 lines.append(f"[{i}] {text}")
         return "\n".join(lines) if lines else "(no relevant passages were found)"
 
-    def generate(
+    def _build_prompt(
         self,
         query: str,
+        sources: Optional[List[Dict[str, Any]]] = None,
         triples: Optional[List[Dict[str, Any]]] = None,
         history: Optional[List[Dict[str, str]]] = None,
         abbreviations: Optional[List[Tuple[str, str]]] = None,
-        max_new_tokens: int = 200,
-        sources: Optional[List[Dict[str, Any]]] = None,
         grounded: bool = True
-    ) -> Dict[str, Any]:
-        """Generate a concise, natural response grounded on retrieved passages."""
+    ) -> str:
+        """Construct prompt grounded on source passages or knowledge graph facts."""
         use_sources = sources is not None
         facts_text = self.format_sources(sources) if use_sources else self.format_triples(triples or [])
         grounding_rule = (
@@ -239,6 +238,28 @@ class GroundedGenerator:
         if "qwen" in self.model_id.lower():
             prompt += "<think>\n\n</think>\n"
 
+        return prompt
+
+    def generate(
+        self,
+        query: str,
+        triples: Optional[List[Dict[str, Any]]] = None,
+        history: Optional[List[Dict[str, str]]] = None,
+        abbreviations: Optional[List[Tuple[str, str]]] = None,
+        max_new_tokens: int = 200,
+        sources: Optional[List[Dict[str, Any]]] = None,
+        grounded: bool = True
+    ) -> Dict[str, Any]:
+        """Generate a concise, natural response grounded on retrieved passages."""
+        prompt = self._build_prompt(
+            query=query,
+            sources=sources,
+            triples=triples,
+            history=history,
+            abbreviations=abbreviations,
+            grounded=grounded
+        )
+
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
 
         t0 = time.time()
@@ -271,3 +292,45 @@ class GroundedGenerator:
             "tokens_generated": len(gen_tokens),
             "tokens_per_sec": round(tok_speed, 1)
         }
+
+    def generate_stream(
+        self,
+        query: str,
+        sources: Optional[List[Dict[str, Any]]] = None,
+        triples: Optional[List[Dict[str, Any]]] = None,
+        history: Optional[List[Dict[str, str]]] = None,
+        abbreviations: Optional[List[Tuple[str, str]]] = None,
+        max_new_tokens: int = 200,
+        grounded: bool = True
+    ):
+        """Stream generated response tokens one by one as they are produced."""
+        from threading import Thread
+        from transformers import TextIteratorStreamer
+
+        prompt = self._build_prompt(
+            query=query,
+            sources=sources,
+            triples=triples,
+            history=history,
+            abbreviations=abbreviations,
+            grounded=grounded
+        )
+
+        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
+        streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True)
+
+        kwargs = dict(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            pad_token_id=self.tokenizer.pad_token_id or self.tokenizer.eos_token_id,
+            eos_token_id=self.tokenizer.eos_token_id,
+            streamer=streamer
+        )
+        thread = Thread(target=self.model.generate, kwargs=kwargs)
+        thread.start()
+
+        for chunk in streamer:
+            clean_chunk = chunk.replace("<think>", "").replace("</think>", "")
+            if clean_chunk:
+                yield clean_chunk

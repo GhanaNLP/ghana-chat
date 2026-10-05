@@ -10,7 +10,7 @@ from typing import Optional, List, Dict, Any
 import torch
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import __version__, config
@@ -91,6 +91,7 @@ class QuestionRequest(BaseModel):
     history: Optional[List[ChatMessage]] = Field(default=[], description="Prior conversation turns")
     max_sources: Optional[int] = Field(default=6, ge=1, le=15)
     country_filter: Optional[str] = Field(default="Ghana")
+    stream: Optional[bool] = Field(default=False, description="Stream response tokens via Server-Sent Events (SSE)")
 
 
 class SourceHit(BaseModel):
@@ -196,7 +197,45 @@ async def ask_question(req: QuestionRequest):
     history_dicts = ([{"role": m.role, "content": m.content} for m in req.history]
                      if is_followup and req.history else [])
 
-    # 3. Generate a grounded response with Gemma 4 2B in friendly narrative prose.
+    # Streaming Branch: stream tokens directly to frontend via SSE
+    if req.stream:
+        def sse_event_stream():
+            import json
+            meta_data = {
+                "sources": [SourceHit(**s).dict() for s in sources],
+                "grounded": grounded,
+                "is_followup": is_followup,
+                "model": config.MODEL_ID
+            }
+            yield f"event: meta\ndata: {json.dumps(meta_data)}\n\n"
+
+            try:
+                for token_chunk in generator.generate_stream(
+                    query=query,
+                    sources=sources,
+                    grounded=grounded,
+                    history=history_dicts,
+                    abbreviations=ret_res.get("abbreviations", [])
+                ):
+                    yield f"event: token\ndata: {json.dumps({'token': token_chunk})}\n\n"
+            except Exception as e:
+                logger.error("Error during streaming generation: %s", e)
+                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+                return
+
+            yield f"event: done\ndata: {json.dumps({'status': 'complete'})}\n\n"
+
+        return StreamingResponse(
+            sse_event_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
+
+    # 3. Non-streaming fallback: Generate complete grounded response
     try:
         gen_res = generator.generate(
             query=query,
