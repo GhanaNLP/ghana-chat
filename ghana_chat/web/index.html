@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -7,31 +7,7 @@
   <meta name="description" content="Ghana Chat: Truthful question answering strictly grounded on a Ghanaian Knowledge Graph powered by Qwen 2B on NVIDIA H200.">
   <style>
     :root {
-      --bg-app: #111111;
-      --bg-sidebar: #181818;
-      --bg-chat: #1e1e1e;
-      --bg-input: #262626;
-      --bg-bubble-user: #2d3748;
-      --bg-bubble-bot: #232323;
-      --border: #2d2d2d;
-      --border-light: #383838;
-      --text: #ededed;
-      --text-muted: #9e9e9e;
-      --text-subtle: #707070;
-      --primary: #00875a;
-      --primary-hover: #00a36d;
-      --accent: #fcd116;
-      --card-bg: #232323;
-      --card-hover: #2a2a2a;
-      --radius-sm: 8px;
-      --radius-md: 12px;
-      --radius-lg: 18px;
-      --radius-pill: 9999px;
-      --shadow: 0 4px 20px rgba(0,0,0,0.3);
-    }
-
-    [data-theme="light"] {
-      --bg-app: #f4f4f5;
+      --bg-app: #f7f7f8;
       --bg-sidebar: #fafafa;
       --bg-chat: #ffffff;
       --bg-input: #f4f4f5;
@@ -46,7 +22,30 @@
       --primary-hover: #006b47;
       --card-bg: #ffffff;
       --card-hover: #f9f9fb;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 18px;
+      --radius-pill: 9999px;
       --shadow: 0 4px 20px rgba(0,0,0,0.06);
+    }
+
+    [data-theme="dark"] {
+      --bg-app: #111111;
+      --bg-sidebar: #181818;
+      --bg-chat: #1e1e1e;
+      --bg-input: #262626;
+      --bg-bubble-user: #2d3748;
+      --bg-bubble-bot: #232323;
+      --border: #2d2d2d;
+      --border-light: #383838;
+      --text: #ededed;
+      --text-muted: #9e9e9e;
+      --text-subtle: #707070;
+      --primary: #00875a;
+      --primary-hover: #00a36d;
+      --card-bg: #232323;
+      --card-hover: #2a2a2a;
+      --shadow: 0 4px 20px rgba(0,0,0,0.3);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
@@ -634,18 +633,22 @@
     });
 
     // Theme Toggle
+    function updateThemeBtn(theme) {
+      btnTheme.textContent = (theme === 'dark') ? 'Light Mode' : 'Dark Mode';
+    }
+
     btnTheme.addEventListener('click', () => {
-      const current = document.documentElement.getAttribute('data-theme');
+      const current = document.documentElement.getAttribute('data-theme') || 'light';
       const target = (current === 'light') ? 'dark' : 'light';
       document.documentElement.setAttribute('data-theme', target);
       localStorage.setItem('ghana_chat_theme', target);
+      updateThemeBtn(target);
     });
 
-    // Restore Theme
-    const savedTheme = localStorage.getItem('ghana_chat_theme');
-    if (savedTheme) {
-      document.documentElement.setAttribute('data-theme', savedTheme);
-    }
+    // Default to Light Theme
+    const savedTheme = localStorage.getItem('ghana_chat_theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeBtn(savedTheme);
 
     // Starter Cards Handler
     document.querySelectorAll('.starter-card').forEach(card => {
