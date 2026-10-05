@@ -100,3 +100,18 @@ def test_no_reflexive_triples():
     for head_key, items in retriever.heads_map.items():
         for t in items:
             assert t["head"].lower() != t["tail"].lower(), f"Reflexive triple found: {t}"
+
+
+def test_sentence_server_anaphora():
+    from ghana_chat.server import ChatMessage, is_followup_query, retrieval_query
+
+    h = [ChatMessage(role="user", content="Who was Ghana's first president?")]
+    
+    # Follow-up with pronoun
+    assert is_followup_query("When did he establish the CPP?", h) is True
+    expanded = retrieval_query("When did he establish the CPP?", h)
+    assert "first president" in expanded and "CPP" in expanded
+
+    # Unrelated new topic
+    assert is_followup_query("What is the capital of Ghana?", h) is False
+    assert retrieval_query("What is the capital of Ghana?", h) == "What is the capital of Ghana?"

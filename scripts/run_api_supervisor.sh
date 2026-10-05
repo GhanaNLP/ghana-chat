@@ -11,6 +11,8 @@ LOG="$PROJ/server.log"
 cd "$PROJ" || exit 1
 # shellcheck disable=SC1090
 source "$VENV"
+export HF_HOME="/mnt/volume_d2wey28/hf_cache"
+export PYTHONPATH="$PROJ"
 
 while true; do
     echo "[supervisor] starting uvicorn at $(date -Is)" >> "$LOG"

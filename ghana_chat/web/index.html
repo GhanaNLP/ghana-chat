@@ -438,6 +438,7 @@
     .fact-head { font-weight: 600; color: var(--primary); }
     .fact-rel { color: var(--text-muted); padding: 0 0.25rem; }
     .fact-tail { color: var(--text); }
+    .fact-sentence { color: var(--text); font-family: inherit; }
 
     /* Copy Button */
     .msg-actions {
@@ -671,10 +672,18 @@
   <script>
     const DEFAULT_API = 'https://ghana-chat.ghanaopenai.org';
 
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
     // Conversation State
     let chatHistory = [];
-    let historyEntities = [];
-    let conversationTriples = [];
 
     const messagesFeed = document.getElementById('messages-feed');
     const feedInner = document.querySelector('.feed-inner');
@@ -722,8 +731,6 @@
     // New Chat Button
     btnNew.addEventListener('click', () => {
       chatHistory = [];
-      historyEntities = [];
-      conversationTriples = [];
       feedInner.innerHTML = '';
       feedInner.appendChild(welcomeHero);
       welcomeHero.style.display = 'block';
@@ -762,9 +769,7 @@
       try {
         const payload = {
           message: message,
-          history: chatHistory,
-          history_entities: historyEntities,
-          conversation_triples: conversationTriples
+          history: chatHistory
         };
 
         const controller = new AbortController();
@@ -804,14 +809,10 @@
         // Topic switch management
         if (!data.is_followup && chatHistory.length > 0) {
           chatHistory = [];
-          historyEntities = [];
-          conversationTriples = [];
         }
 
         chatHistory.push({ role: 'user', content: message });
         chatHistory.push({ role: 'assistant', content: data.answer });
-        historyEntities = data.all_entities || historyEntities;
-        conversationTriples = data.all_triples || conversationTriples;
 
         // Render Answer
         updateAssistantRow(loadingRow, data);
@@ -944,32 +945,37 @@
         bubble.appendChild(para);
       }
 
-      // Collapsible Knowledge Facts / Triples Drawer
-      const trs = (typeof data === 'object' && data !== null)
-        ? (data.triples || data.all_triples || [])
-        : (triplesArg || []);
-      if (trs.length > 0) {
+      // Collapsible source-passages drawer
+      const srcs = (typeof data === 'object' && data !== null)
+        ? (data.sources || [])
+        : [];
+      if (srcs.length > 0) {
         const drawer = document.createElement('details');
         drawer.className = 'facts-drawer';
-        drawer.innerHTML = `
-          <summary>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"></circle>
-              <line x1="12" y1="16" x2="12" y2="12"></line>
-              <line x1="12" y1="8" x2="12.01" y2="8"></line>
-            </svg>
-            <span>View Knowledge Facts (${trs.length})</span>
-          </summary>
-          <ul class="facts-list">
-            ${trs.map(t => `
-              <li class="facts-item">
-                <span class="fact-head">${escapeHtml(t.head)}</span>
-                <span class="fact-rel">| ${escapeHtml(t.relation)} |</span>
-                <span class="fact-tail">${escapeHtml(t.tail)}</span>
-              </li>
-            `).join('')}
-          </ul>
+        
+        const summary = document.createElement('summary');
+        summary.innerHTML = `
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          <span>View Sources (${srcs.length})</span>
         `;
+        drawer.appendChild(summary);
+
+        const list = document.createElement('ol');
+        list.className = 'facts-list';
+        srcs.forEach(s => {
+          const item = document.createElement('li');
+          item.className = 'facts-item';
+          const span = document.createElement('span');
+          span.className = 'fact-sentence';
+          span.textContent = s.sentence || s.context || '';
+          item.appendChild(span);
+          list.appendChild(item);
+        });
+        drawer.appendChild(list);
         bubble.appendChild(drawer);
       }
 

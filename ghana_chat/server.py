@@ -1,6 +1,7 @@
 """FastAPI Server for Ghana Chat API & Web Interface."""
 
 import os
+import re
 import time
 import logging
 from pathlib import Path
@@ -13,14 +14,14 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from . import __version__, config
-from .retriever import HeadKGRetriever
+from .noun_phrase_retriever import SentenceNounPhraseRetriever
 from .generator import GroundedGenerator
 
 logger = logging.getLogger("ghana_chat.server")
 
 app = FastAPI(
     title="Ghana Chat API",
-    description="Head-focused Knowledge Graph Grounded QA powered by Qwen 2B on NVIDIA H200",
+    description="Grounded QA powered by Gemma 4 2B on NVIDIA H200",
     version=__version__
 )
 
@@ -34,14 +35,14 @@ app.add_middleware(
 )
 
 # Lazy singletons
-_retriever: Optional[HeadKGRetriever] = None
+_retriever: Optional[SentenceNounPhraseRetriever] = None
 _generator: Optional[GroundedGenerator] = None
 
 
-def get_retriever() -> HeadKGRetriever:
+def get_retriever() -> SentenceNounPhraseRetriever:
     global _retriever
     if _retriever is None:
-        _retriever = HeadKGRetriever()
+        _retriever = SentenceNounPhraseRetriever()
     return _retriever
 
 
@@ -57,27 +58,57 @@ class ChatMessage(BaseModel):
     content: str = Field(..., description="Message content")
 
 
+# Pronouns / elided references that mean the query depends on prior turns.
+_FOLLOWUP_CUES = re.compile(
+    r"\b(he|she|they|him|her|them|his|hers|their|it|its|that|this|those|these|the same)\b|"
+    r"\b(also|and then|what about|how many|how much|when|where|who)\b",
+    re.I,
+)
+
+
+def is_followup_query(query: str, history: Optional[List[ChatMessage]]) -> bool:
+    """True when the query leans on prior context rather than standing alone."""
+    if not history:
+        return False
+    if len(query.split()) <= 6 and _FOLLOWUP_CUES.search(query):
+        return True
+    return bool(re.search(r"\b(he|she|him|her|they|them|his|hers|their)\b", query, re.I))
+
+
+def retrieval_query(query: str, history: Optional[List[ChatMessage]]) -> str:
+    """Expand an anaphoric follow-up so retrieval has something to match on."""
+    if not is_followup_query(query, history):
+        return query
+    prior = [m.content for m in history if m.role == "user"]
+    if not prior:
+        return query
+    return f"{prior[-1]} {query}"
+
+
 class QuestionRequest(BaseModel):
     question: Optional[str] = Field(default=None, description="The user query or question")
     message: Optional[str] = Field(default=None, description="Alternative message field")
     history: Optional[List[ChatMessage]] = Field(default=[], description="Prior conversation turns")
-    history_entities: Optional[List[str]] = Field(default=[], description="Entities accumulated in conversation")
-    conversation_triples: Optional[List[Dict[str, Any]]] = Field(default=[], description="Triples accumulated so far")
-    max_triples: Optional[int] = Field(default=8, ge=1, le=25)
+    max_sources: Optional[int] = Field(default=6, ge=1, le=15)
     country_filter: Optional[str] = Field(default="Ghana")
+
+
+class SourceHit(BaseModel):
+    sid: Any = None
+    doc_id: Any = None
+    sentence: str = ""
+    context: str = ""
+    score: float = 0.0
+    matched_candidate: Optional[str] = ""
 
 
 class QuestionResponse(BaseModel):
     question: str
     answer: str
-    reasoning: Optional[str] = Field(default="", description="The model's internal step-by-step reasoning process")
+    reasoning: Optional[str] = Field(default="")
     is_followup: bool
-    new_entities: List[str]
-    all_entities: List[str]
-    new_triples: List[Dict[str, Any]]
-    all_triples: List[Dict[str, Any]]
-    triples: List[Dict[str, Any]]
-    entities: List[str]
+    grounded: bool
+    sources: List[SourceHit] = Field(default=[])
     latency_s: float
     tokens_generated: int
     tokens_per_sec: float
@@ -86,7 +117,7 @@ class QuestionResponse(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    print("Pre-loading KG retriever and Qwen 2B generator...")
+    print("Pre-loading noun-phrase sentence retriever and Gemma 4 2B generator...")
     try:
         get_retriever()
         get_generator()
@@ -116,27 +147,22 @@ async def health_check():
         "model": config.MODEL_ID,
         "device": config.DEVICE,
         "device_name": device_name,
-        "indexed_heads": len(r.heads_map) if r else 0
+        "indexed_sentences": r.n if r else 0,
+        "retrieval": "noun-phrase inverted index"
     }
 
 
 @app.post("/retrieve")
-async def retrieve_triples(req: QuestionRequest):
-    """Retrieve matching Knowledge Graph triples where the query entity is strictly the HEAD."""
+async def retrieve_sources(req: QuestionRequest):
+    """Retrieve source passages relevant to the query."""
     retriever = get_retriever()
-    result = retriever.retrieve(req.question, max_triples=req.max_triples, country_filter=req.country_filter)
-    return result
+    return retriever.retrieve(req.question or req.message or "", max_sources=req.max_sources or 6)
 
 
 @app.post("/ask", response_model=QuestionResponse)
 @app.post("/chat", response_model=QuestionResponse)
 async def ask_question(req: QuestionRequest):
-    """Ask a question or continue a multi-turn conversation with Ghana Chat.
-
-    Follow-up questions referencing established context are automatically detected:
-    - If no new entities are introduced: answers from existing context without new retrieval.
-    - If new entities are introduced: retrieves new head facts and merges them into context.
-    """
+    """Answer a question from retrieved corpus passages using noun-phrase retrieval."""
     query = req.question or req.message
     if not query or len(query.strip()) < 2:
         raise HTTPException(status_code=400, detail="Query message cannot be empty.")
@@ -150,40 +176,33 @@ async def ask_question(req: QuestionRequest):
         logger.error("Model warm-up failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=503, detail="Model is still starting up. Please retry.")
 
-    # 1. Multi-turn aware retrieval
+    # 1. Multi-turn aware noun-phrase retrieval
     try:
+        history_prompts = [m.content for m in req.history if m.role == "user"] if req.history else []
         ret_res = retriever.process_turn(
             query=query,
-            history_entities=req.history_entities,
-            existing_triples=req.conversation_triples,
-            max_triples=req.max_triples or 8,
-            country_filter=req.country_filter
+            history_entities=history_prompts,
+            max_sources=req.max_sources or 6
         )
     except Exception as exc:
         logger.error("Retrieval failed for %r: %s", query, exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Retrieval failed. Please retry.")
 
-    active_triples = ret_res.get("active_triples", ret_res["all_triples"])
-    all_triples = ret_res["all_triples"]
-    new_triples = ret_res["new_triples"]
-    is_followup = ret_res["is_followup"]
+    sources = ret_res.get("sources", [])
+    grounded = bool(ret_res.get("grounded", True))
+    is_followup = bool(ret_res.get("is_followup", False))
 
-    # 2. Topic-Aware History Filtering:
-    # If this is a FOLLOW-UP (referencing established context), include prior conversation turns.
-    # If this is a NEW TOPIC (new entities introduced), prune previous unrelated turns from the prompt
-    # so unrelated past entities (e.g. Asiedu Nketia) do not contaminate the new topic (e.g. cassava farming).
-    if is_followup and req.history:
-        history_dicts = [{"role": m.role, "content": m.content} for m in req.history]
-    else:
-        history_dicts = []
+    # 2. Keep prior turns only for follow-ups, so unrelated topics don't contaminate.
+    history_dicts = ([{"role": m.role, "content": m.content} for m in req.history]
+                     if is_followup and req.history else [])
 
-    # 3. Generate grounded response with Qwen 2B in friendly narrative prose (no think mode)
+    # 3. Generate a grounded response with Gemma 4 2B in friendly narrative prose.
     try:
         gen_res = generator.generate(
             query=query,
-            triples=active_triples,
-            history=history_dicts,
-            abbreviations=ret_res.get("abbreviations", [])
+            sources=sources,
+            grounded=grounded,
+            history=history_dicts
         )
     except torch.cuda.OutOfMemoryError as exc:
         torch.cuda.empty_cache()
@@ -198,12 +217,8 @@ async def ask_question(req: QuestionRequest):
         answer=gen_res["answer"],
         reasoning="",
         is_followup=is_followup,
-        new_entities=ret_res["new_entities"],
-        all_entities=ret_res["all_entities"],
-        new_triples=new_triples,
-        all_triples=all_triples,
-        triples=active_triples,
-        entities=ret_res["all_entities"],
+        grounded=grounded,
+        sources=[SourceHit(**s) for s in sources],
         latency_s=gen_res["latency_s"],
         tokens_generated=gen_res["tokens_generated"],
         tokens_per_sec=gen_res["tokens_per_sec"],
