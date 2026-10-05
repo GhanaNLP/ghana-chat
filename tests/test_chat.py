@@ -1,4 +1,4 @@
-"""Tests for Ghana Chat retrieval, abbreviation resolution, multi-turn follow-up detection, and API endpoints."""
+"""Tests for Ghana Chat retrieval, abbreviation resolution, pronoun follow-ups, and context isolation."""
 
 import pytest
 from ghana_chat.retriever import HeadKGRetriever
@@ -35,30 +35,64 @@ def test_head_focused_retrieval_with_abbreviation():
     res = retriever.retrieve("Who is the chairperson of the NDPC?")
     triples = res.get("triples", [])
     assert len(triples) > 0
-    # Should find facts under NDPC
     heads = [t["head"].lower() for t in triples]
     assert any("ndpc" in h for h in heads)
 
 
-def test_multiturn_followup_detection_no_new_entities():
-    retriever = HeadKGRetriever(config.KG_PATH)
-    
-    # Turn 1: User asks about NDPC
-    t1 = retriever.process_turn("Who is the chairperson of the NDPC?")
-    assert t1["is_followup"] is False
-    assert len(t1["new_triples"]) > 0
-    assert len(t1["all_entities"]) > 0
-    assert len(t1.get("abbreviations", [])) > 0
+def test_multiturn_followup_detection_pronoun_and_attributes():
+    """Verify that 'how many children does he have and does he have a wife?' is recognized
 
-    # Turn 2: User asks follow-up with pronoun ("Where is it located?")
+    as a follow-up on the established subject (he = Asiedu Nketia), NOT as new standalone
+    topics for 'children' or 'wife'.
+    """
+    retriever = HeadKGRetriever(config.KG_PATH)
+
+    # Turn 1
+    t1 = retriever.process_turn("Who is Asiedu Nketia?")
+    assert t1["is_followup"] is False
+
+    # Turn 2: Follow-up using pronoun 'he' and attribute queries 'children', 'wife'
     t2 = retriever.process_turn(
-        query="Where is it located?",
+        query="how many children does he have and does he have a wife?",
         history_entities=t1["all_entities"],
         existing_triples=t1["all_triples"]
     )
+
+    # Must be recognized as follow-up
     assert t2["is_followup"] is True
-    assert len(t2["new_triples"]) == 0
-    assert len(t2["all_triples"]) == len(t1["all_triples"])
+    # Must NOT treat children/wife as new independent topic entities
+    assert len(t2["new_entities"]) == 0
+    # Must preserve the subject's context
+    assert len(t2["active_triples"]) > 0
+    for t in t2["active_triples"]:
+        assert t["head"].lower() not in ("wife", "child", "children")
+
+
+def test_topic_switch_with_new_entities():
+    """Verify that asking a completely new question (e.g.
+
+    cassava farming) after a political query triggers a topic switch and retrieves
+    farming facts.
+    """
+    retriever = HeadKGRetriever(config.KG_PATH)
+
+    # Turn 1: Politics
+    t1 = retriever.process_turn("Who is Asiedu Nketia?")
+
+    # Turn 2: Agriculture (Topic Switch)
+    t2 = retriever.process_turn(
+        query="in what month do ghanain farmers plant cassava",
+        history_entities=t1["all_entities"],
+        existing_triples=t1["all_triples"]
+    )
+
+    # Must recognize topic switch
+    assert t2["is_followup"] is False
+    # Must identify new agricultural entities
+    assert any("cassava" in e.lower() or "farmer" in e.lower() for e in t2["new_entities"])
+    # Active triples must relate to agriculture, not Asiedu Nketia
+    for t in t2["active_triples"]:
+        assert "asiedu nketia" not in t["head"].lower()
 
 
 def test_no_reflexive_triples():

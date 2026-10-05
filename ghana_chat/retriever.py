@@ -18,6 +18,19 @@ STOPWORDS = {
     "these", "those", "have", "has", "had", "which", "its", "their", "his", "her"
 }
 
+# Words that refer to an established subject in context
+PRONOUNS_REF = {
+    "he", "him", "his", "she", "her", "hers", "it", "its", "they", "them", "their", "this", "that"
+}
+
+# Attribute / property queries that describe a subject rather than a new standalone topic
+ATTRIBUTE_WORDS = {
+    "children", "child", "wife", "husband", "spouse", "son", "daughter", "family",
+    "age", "birthday", "birth", "born", "death", "died", "hometown", "parents",
+    "father", "mother", "school", "education", "religion", "salary", "career",
+    "qualifications", "degree", "net worth", "background"
+}
+
 # Generic words that often refer back to previously mentioned entities (anaphora)
 GENERIC_ANAPHORA = {
     "organization", "organisation", "institution", "agency", "commission",
@@ -206,19 +219,28 @@ class HeadKGRetriever:
         history_set = set(e.strip().lower() for e in (history_entities or []))
         existing_list = list(existing_triples or [])
 
+        # Extract tokens and candidate entities from query
+        query_words = set(re.findall(r"\b[a-zA-Z0-9'-]+\b", query.lower()))
+        has_referential_pronoun = bool(query_words & PRONOUNS_REF) and len(history_set) > 0
+
         # Extract candidates from current query
         query_candidates = self.extract_candidates(query)
 
-        # Filter out candidates that are purely generic anaphora referring back to prior context
-        filtered_candidates = [
-            c for c in query_candidates
-            if c not in GENERIC_ANAPHORA and not (len(c.split()) == 1 and c in GENERIC_ANAPHORA)
-        ]
+        # Filter out candidates that are purely generic anaphora or attribute queries when referencing prior entity
+        filtered_candidates = []
+        for c in query_candidates:
+            c_low = c.lower()
+            if c_low in GENERIC_ANAPHORA or (len(c_low.split()) == 1 and c_low in GENERIC_ANAPHORA):
+                continue
+            # If the user used a pronoun ("he", "she", "it"), attribute words (e.g. "children", "wife")
+            # are properties of the subject, not standalone topic entities
+            if has_referential_pronoun and (c_low in ATTRIBUTE_WORDS or any(w in ATTRIBUTE_WORDS for w in c_low.split())):
+                continue
+            filtered_candidates.append(c)
 
         # Check for genuinely new entities not already in conversation history
         new_entities = []
         for c in filtered_candidates:
-            # Check if this entity or a superstring was already processed
             already_known = (c in history_set) or any(c in h or h in c for h in history_set)
             if not already_known:
                 new_entities.append(c)
@@ -226,8 +248,17 @@ class HeadKGRetriever:
         # Check for abbreviations in this query
         abbrev_pairs, _ = self.resolver.resolve_query(query)
 
-        # Case A: Pure follow-up within existing context (no new entities introduced)
-        if len(new_entities) == 0 and len(history_set) > 0:
+        # Case A: Pure follow-up within existing context (no new entities introduced OR referential pronoun used)
+        if (len(new_entities) == 0 or has_referential_pronoun) and len(history_set) > 0:
+            # Check if there are specific attribute triples for the history entity in the knowledge graph
+            specific_triples = []
+            for t in existing_list:
+                t_text = f"{t.get('head', '')} {t.get('relation', '')} {t.get('tail', '')}".lower()
+                if any(w in t_text for w in query_words if len(w) > 2 and w not in STOPWORDS):
+                    specific_triples.append(t)
+
+            active_facts = specific_triples if specific_triples else existing_list
+
             return {
                 "query": query,
                 "is_followup": True,
@@ -235,9 +266,9 @@ class HeadKGRetriever:
                 "all_entities": list(history_set),
                 "new_triples": [],
                 "all_triples": existing_list,
-                "active_triples": existing_list,
+                "active_triples": active_facts,
                 "abbreviations": abbrev_pairs,
-                "num_triples": len(existing_list)
+                "num_triples": len(active_facts)
             }
 
         # Case B: First turn or topic switch introducing new entities
