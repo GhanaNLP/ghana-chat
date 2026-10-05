@@ -281,43 +281,6 @@
       margin-bottom: 0;
     }
 
-    /* Reasoning Drawer (Airbnb-style) */
-    details.reasoning-box {
-      margin-bottom: 0.85rem;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 0.6rem 0.85rem;
-      font-size: 0.84rem;
-      transition: background 0.15s;
-    }
-    details.reasoning-box[open] {
-      background: var(--card-bg);
-      box-shadow: var(--shadow-sm);
-    }
-    summary.reasoning-summary {
-      cursor: pointer;
-      font-weight: 600;
-      color: var(--text-secondary);
-      user-select: none;
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-      outline: none;
-    }
-    summary.reasoning-summary:hover {
-      color: var(--text);
-    }
-    .reasoning-body {
-      margin-top: 0.6rem;
-      padding-top: 0.5rem;
-      border-top: 1px solid var(--border);
-      color: var(--text-secondary);
-      white-space: pre-wrap;
-      line-height: 1.5;
-      font-size: 0.82rem;
-    }
-
     /* Typing Dots Animation */
     .typing-indicator {
       display: inline-flex;
@@ -629,23 +592,8 @@
       bubble.innerHTML = '';
 
       const answerText = (typeof data === 'string') ? data : (data.answer || '');
-      const reasoningText = (typeof data === 'object' && data.reasoning) ? data.reasoning.trim() : '';
 
-      // 1. Render Collapsible Reasoning Process if present
-      if (reasoningText) {
-        const rDetails = document.createElement('details');
-        rDetails.className = 'reasoning-box';
-        rDetails.innerHTML = `
-          <summary class="reasoning-summary">
-            <span>💭</span>
-            <span>Reasoning Process</span>
-          </summary>
-          <div class="reasoning-body">${escapeHtml(reasoningText)}</div>
-        `;
-        bubble.appendChild(rDetails);
-      }
-
-      // 2. Format clean narrative paragraphs for the final answer
+      // Format clean narrative paragraphs for the final answer
       const paragraphs = answerText.split(/\n\s*\n/).filter(p => p.trim().length > 0);
       if (paragraphs.length > 0) {
         paragraphs.forEach(p => {

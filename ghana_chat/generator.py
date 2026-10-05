@@ -40,14 +40,14 @@ class GroundedGenerator:
         query: str,
         triples: List[Dict[str, Any]],
         history: Optional[List[Dict[str, str]]] = None,
-        max_new_tokens: int = 400
+        max_new_tokens: int = 160
     ) -> Dict[str, Any]:
-        """Construct prompt, generate with MiniCPM 5 (1B) reasoning enabled by default, and return both thought and narrative answer."""
+        """Construct prompt and generate response directly in friendly narrative prose with think mode disabled."""
         facts_text = self.format_triples(triples)
 
         system_msg = (
             "You are Ghana Chat, a warm, friendly, and knowledgeable assistant for Ghana. "
-            "Your goal is to explain facts about Ghana in an engaging, natural, and helpful conversation.\n\n"
+            "Your goal is to answer questions about Ghana in engaging, natural, and helpful conversation.\n\n"
             "Guidelines:\n"
             "1. Persona: Speak warmly, politely, and naturally like an engaging local guide.\n"
             "2. Format: Write strictly in flowing narrative prose and natural paragraphs. "
@@ -84,6 +84,9 @@ class GroundedGenerator:
                 prompt += f"{m['role'].capitalize()}: {m['content']}\n\n"
             prompt += "Assistant:"
 
+        # Disable think mode for instant, direct narrative generation (no thinking tokens)
+        prompt += "<think>\n\n</think>\n"
+
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
 
         t0 = time.time()
@@ -101,33 +104,17 @@ class GroundedGenerator:
         gen_tokens = outputs[0][input_len:]
         raw_output = self.tokenizer.decode(gen_tokens, skip_special_tokens=True).strip()
 
-        # Extract reasoning thought process (<think>...</think>)
-        reasoning = ""
+        # Clean any think tags
         answer = raw_output
-
-        if "<think>" in raw_output:
-            if "</think>" in raw_output:
-                parts = raw_output.split("</think>", 1)
-                reasoning = parts[0].replace("<think>", "").strip()
-                answer = parts[1].strip()
-            else:
-                # Still inside think block
-                reasoning = raw_output.replace("<think>", "").strip()
-                answer = ""
-        elif "</think>" in raw_output:
-            parts = raw_output.split("</think>", 1)
-            reasoning = parts[0].strip()
-            answer = parts[1].strip()
-
-        # If answer is empty but reasoning has content, use reasoning as answer fallback
-        if not answer and reasoning:
-            answer = reasoning
+        if "</think>" in answer:
+            answer = answer.split("</think>")[-1].strip()
+        if "<think>" in answer:
+            answer = answer.replace("<think>", "").strip()
 
         tok_speed = len(gen_tokens) / max(latency, 1e-5)
 
         return {
             "answer": answer,
-            "reasoning": reasoning,
             "latency_s": round(latency, 3),
             "tokens_generated": len(gen_tokens),
             "tokens_per_sec": round(tok_speed, 1)

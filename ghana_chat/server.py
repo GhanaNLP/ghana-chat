@@ -163,13 +163,13 @@ async def ask_question(req: QuestionRequest):
     else:
         history_dicts = []
 
-    # 3. Generate grounded response with Qwen 2B in friendly narrative prose
+    # 3. Generate grounded response with Qwen 2B in friendly narrative prose (no think mode)
     gen_res = generator.generate(query=query, triples=active_triples, history=history_dicts)
 
     return QuestionResponse(
         question=query,
         answer=gen_res["answer"],
-        reasoning=gen_res.get("reasoning", ""),
+        reasoning="",
         is_followup=is_followup,
         new_entities=ret_res["new_entities"],
         all_entities=ret_res["all_entities"],

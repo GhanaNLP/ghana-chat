@@ -7,7 +7,7 @@ import torch
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
 
-MODEL_ID = os.environ.get("GHANA_CHAT_MODEL", "openbmb/MiniCPM5-1B")
+MODEL_ID = os.environ.get("GHANA_CHAT_MODEL", "Qwen/Qwen3.5-2B")
 KG_PATH = os.environ.get("GHANA_CHAT_KG_PATH", str(DATA_DIR / "ghana_triples.parquet"))
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
