@@ -378,6 +378,49 @@
       margin-bottom: 0;
     }
 
+    /* Collapsible Triples Drawer */
+    details.facts-drawer {
+      margin-top: 0.75rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid var(--border);
+      font-size: 0.8rem;
+    }
+    details.facts-drawer summary {
+      cursor: pointer;
+      font-weight: 500;
+      color: var(--text-muted);
+      user-select: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      outline: none;
+      transition: color 0.15s;
+    }
+    details.facts-drawer summary:hover {
+      color: var(--text);
+    }
+    .facts-list {
+      margin-top: 0.5rem;
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .facts-item {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.76rem;
+      background: var(--bg-app);
+      padding: 0.3rem 0.6rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      overflow-x: auto;
+    }
+    .fact-head { font-weight: 600; color: var(--primary); }
+    .fact-rel { color: var(--text-muted); padding: 0 0.25rem; }
+    .fact-tail { color: var(--text); }
+
     /* Copy Button */
     .msg-actions {
       display: flex;
@@ -731,7 +774,7 @@
         conversationTriples = data.all_triples || conversationTriples;
 
         // Render Answer
-        updateAssistantRow(loadingRow, data.answer);
+        updateAssistantRow(loadingRow, data);
 
       } catch (err) {
         updateAssistantRow(loadingRow, 'Sorry, I had trouble reaching my server. Please try again in a moment.');
@@ -788,9 +831,11 @@
       return row;
     }
 
-    function updateAssistantRow(row, answerText) {
+    function updateAssistantRow(row, data) {
       const bubble = row.querySelector('.bubble');
       bubble.innerHTML = '';
+
+      const answerText = (typeof data === 'string') ? data : (data.answer || '');
 
       const paragraphs = answerText.split(/\n\s*\n/).filter(p => p.trim().length > 0);
       if (paragraphs.length > 0) {
@@ -803,6 +848,33 @@
         const para = document.createElement('p');
         para.textContent = answerText;
         bubble.appendChild(para);
+      }
+
+      // Collapsible Knowledge Facts / Triples Drawer
+      const trs = (typeof data === 'object') ? (data.triples || data.all_triples || []) : [];
+      if (trs.length > 0) {
+        const drawer = document.createElement('details');
+        drawer.className = 'facts-drawer';
+        drawer.innerHTML = `
+          <summary>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span>View Knowledge Facts (${trs.length})</span>
+          </summary>
+          <ul class="facts-list">
+            ${trs.map(t => `
+              <li class="facts-item">
+                <span class="fact-head">${escapeHtml(t.head)}</span>
+                <span class="fact-rel">| ${escapeHtml(t.relation)} |</span>
+                <span class="fact-tail">${escapeHtml(t.tail)}</span>
+              </li>
+            `).join('')}
+          </ul>
+        `;
+        bubble.appendChild(drawer);
       }
 
       // Add clean copy button
