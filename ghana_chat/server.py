@@ -148,13 +148,14 @@ async def ask_question(req: QuestionRequest):
         country_filter=req.country_filter
     )
 
+    active_triples = ret_res.get("active_triples", ret_res["all_triples"])
     all_triples = ret_res["all_triples"]
     new_triples = ret_res["new_triples"]
     is_followup = ret_res["is_followup"]
 
-    # 2. Generate grounded response with Qwen 2B preserving history
+    # 2. Generate grounded response with Qwen 2B in friendly narrative prose
     history_dicts = [{"role": m.role, "content": m.content} for m in req.history] if req.history else []
-    gen_res = generator.generate(query=query, triples=all_triples, history=history_dicts)
+    gen_res = generator.generate(query=query, triples=active_triples, history=history_dicts)
 
     return QuestionResponse(
         question=query,
@@ -164,7 +165,7 @@ async def ask_question(req: QuestionRequest):
         all_entities=ret_res["all_entities"],
         new_triples=new_triples,
         all_triples=all_triples,
-        triples=all_triples,
+        triples=active_triples,
         entities=ret_res["all_entities"],
         latency_s=gen_res["latency_s"],
         tokens_generated=gen_res["tokens_generated"],

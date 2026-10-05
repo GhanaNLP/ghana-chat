@@ -383,21 +383,29 @@
 
     // Restore or set backend endpoint
     const DEFAULT_API = 'https://ghana-chat.ghanaopenai.org';
-    const savedEndpoint = localStorage.getItem('ghana_chat_endpoint');
-    if (savedEndpoint) {
-      endpointInput.value = savedEndpoint;
-    } else {
-      endpointInput.value = DEFAULT_API;
+    let savedEndpoint = localStorage.getItem('ghana_chat_endpoint');
+    if (!savedEndpoint || savedEndpoint.includes('localhost') || savedEndpoint.includes('hf.space') || !savedEndpoint.startsWith('https://')) {
+      savedEndpoint = DEFAULT_API;
+      localStorage.setItem('ghana_chat_endpoint', DEFAULT_API);
     }
+    endpointInput.value = savedEndpoint;
+
     endpointInput.addEventListener('change', () => {
-      localStorage.setItem('ghana_chat_endpoint', endpointInput.value.trim());
+      const val = endpointInput.value.trim();
+      if (val) {
+        localStorage.setItem('ghana_chat_endpoint', val);
+      }
     });
 
     // Handle Quick Chips
     document.querySelectorAll('.chip').forEach(btn => {
-      btn.addEventListener('click', () => {
-        queryInput.value = btn.getAttribute('data-q');
-        chatForm.dispatchEvent(new Event('submit'));
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        const q = btn.getAttribute('data-q') || btn.textContent.trim();
+        if (q) {
+          queryInput.value = q;
+          sendMessage(q);
+        }
       });
     });
 
@@ -413,11 +421,14 @@
     });
 
     // Form Submission
-    chatForm.addEventListener('submit', async (e) => {
+    chatForm.addEventListener('submit', (e) => {
       e.preventDefault();
       const message = queryInput.value.trim();
       if (!message) return;
+      sendMessage(message);
+    });
 
+    async function sendMessage(message) {
       if (welcomeCard && welcomeCard.parentElement) {
         welcomeCard.style.display = 'none';
       }
@@ -425,7 +436,6 @@
       // 1. Render User Message
       appendMessage('user', message);
       queryInput.value = '';
-      queryInput.focus();
 
       // Disable submit while processing
       btnSubmit.disabled = true;
@@ -434,7 +444,11 @@
       // Create placeholder assistant row for streaming/loading
       const loadingRow = appendMessage('assistant', 'Consulting Ghanaian Knowledge Graph...');
 
-      const base = endpointInput.value.trim().replace(/\/+$/, '');
+      let base = endpointInput.value.trim().replace(/\/+$/, '');
+      if (!base || base.includes('localhost') || base.includes('hf.space')) {
+        base = DEFAULT_API;
+        endpointInput.value = DEFAULT_API;
+      }
 
       try {
         const payload = {
@@ -467,13 +481,13 @@
 
       } catch (err) {
         loadingRow.querySelector('.bubble-text').innerHTML =
-          `<span style="color:var(--red);">Error connecting to backend: ${err.message}. Please verify the API server is running at ${base}.</span>`;
+          `<span style="color:var(--red);">Error connecting to backend (${escapeHtml(base)}): ${escapeHtml(err.message)}.<br><small>If you see a network error, please ensure the backend at ${escapeHtml(base)} is reachable.</small></span>`;
       } finally {
         btnSubmit.disabled = false;
         btnSubmit.textContent = 'Send';
         scrollBottom();
       }
-    });
+    }
 
     function appendMessage(role, text) {
       const row = document.createElement('div');

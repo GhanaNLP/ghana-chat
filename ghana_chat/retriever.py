@@ -88,13 +88,14 @@ class HeadKGRetriever:
         print(f"Indexed {count:,} triples across {len(self.heads_map):,} unique head entities from {path}")
 
     def extract_candidates(self, query: str) -> List[str]:
-        """Extract candidate noun phrases and named entities from query text."""
+        """Extract candidate noun phrases, individual entities, and nouns from query text."""
         candidates = []
         nlp = get_spacy_nlp()
 
         if nlp:
             doc = nlp(query)
-            # 1. Noun chunks (stripped of leading/trailing stopwords)
+
+            # 1. Full noun chunks
             for chunk in doc.noun_chunks:
                 words = [w for w in chunk.text.strip().lower().split() if w not in STOPWORDS]
                 cleaned = " ".join(words)
@@ -107,16 +108,37 @@ class HeadKGRetriever:
                 cleaned = " ".join(words)
                 if len(cleaned) > 2 and cleaned not in candidates:
                     candidates.append(cleaned)
+
+            # 3. Individual NOUN and PROPN tokens (critical for decomposed concepts like 'cassava', 'farmers')
+            for token in doc:
+                t_low = token.text.strip().lower()
+                if token.pos_ in ("NOUN", "PROPN") and t_low not in STOPWORDS and len(t_low) > 2:
+                    if t_low not in candidates:
+                        candidates.append(t_low)
+                    lem = token.lemma_.strip().lower()
+                    if lem not in STOPWORDS and len(lem) > 2 and lem not in candidates:
+                        candidates.append(lem)
+
+            # 4. Individual words from multi-word noun chunks
+            for chunk in doc.noun_chunks:
+                for w in chunk.text.strip().lower().split():
+                    if w not in STOPWORDS and len(w) > 2 and w not in candidates:
+                        candidates.append(w)
         else:
-            # Fallback simple heuristic tokenization
+            # Fallback regex tokenization
             clean_q = re.sub(r"[^\w\s-]", " ", query).lower()
             words = [w for w in clean_q.split() if w not in STOPWORDS and len(w) > 2]
+            for w in words:
+                if w not in candidates:
+                    candidates.append(w)
             for i in range(len(words)):
                 for j in range(i + 1, min(i + 4, len(words) + 1)):
-                    candidates.append(" ".join(words[i:j]))
+                    phrase = " ".join(words[i:j])
+                    if phrase not in candidates:
+                        candidates.append(phrase)
 
-        # Sort longer (more specific) phrases first
-        candidates.sort(key=lambda x: -len(x))
+        # Sort longer, more specific phrases first, followed by individual nouns
+        candidates.sort(key=lambda x: (-len(x.split()), -len(x)))
         return candidates
 
     def retrieve(self, query: str, max_triples: int = 10, country_filter: Optional[str] = "Ghana") -> Dict[str, Any]:
@@ -195,13 +217,14 @@ class HeadKGRetriever:
                 "all_entities": list(history_set),
                 "new_triples": [],
                 "all_triples": existing_list,
+                "active_triples": existing_list,
                 "num_triples": len(existing_list)
             }
 
-        # Case B: First turn or follow-up introducing new entities
+        # Case B: First turn or topic switch introducing new entities
         targets = new_entities if new_entities else query_candidates
         matched_new = []
-        seen = set((t["head"].lower(), t["relation"].lower(), t["tail"].lower()) for t in existing_list)
+        seen = set()
 
         for cand in targets:
             if cand in self.heads_map:
@@ -228,7 +251,10 @@ class HeadKGRetriever:
             )
 
         updated_entities = list(history_set.union(set(targets)))
-        updated_triples = existing_list + matched_new
+        # For a new topic or new entity query, the active grounding context for the prompt
+        # must be the facts about the new entities (not polluted by previous unrelated topics)
+        active_triples = matched_new if matched_new else []
+        all_triples = existing_list + matched_new
 
         return {
             "query": query,
@@ -236,6 +262,7 @@ class HeadKGRetriever:
             "new_entities": new_entities if new_entities else targets,
             "all_entities": updated_entities,
             "new_triples": matched_new,
-            "all_triples": updated_triples,
-            "num_triples": len(updated_triples)
+            "all_triples": all_triples,
+            "active_triples": active_triples,
+            "num_triples": len(active_triples)
         }

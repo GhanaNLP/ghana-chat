@@ -40,16 +40,22 @@ class GroundedGenerator:
         query: str,
         triples: List[Dict[str, Any]],
         history: Optional[List[Dict[str, str]]] = None,
-        max_new_tokens: int = 150
+        max_new_tokens: int = 180
     ) -> Dict[str, Any]:
-        """Construct multi-turn prompt and generate response strictly adhering to the facts."""
+        """Construct multi-turn prompt and generate response strictly adhering to the facts in narrative prose."""
         facts_text = self.format_triples(triples)
 
         system_msg = (
-            "You are a helpful and factual knowledge assistant for Ghana. "
-            "Answer the user's questions using ONLY the provided Knowledge Graph facts below. "
-            "Do NOT invent, extrapolate, or hallucinate any facts not explicitly present in the knowledge graph. "
-            "If the provided facts do not contain the answer, say 'Based on the available knowledge graph facts, I do not have information to answer that.'\n\n"
+            "You are Ghana Chat, a warm, friendly, and knowledgeable assistant for Ghana. "
+            "Your goal is to explain facts about Ghana in an engaging, natural, and helpful conversation.\n\n"
+            "Guidelines:\n"
+            "1. Persona: Speak warmly, politely, and naturally like a helpful local guide.\n"
+            "2. Format: Write strictly in flowing narrative prose and natural paragraphs. "
+            "Do NOT use bullet points, numbered lists, or robotic phrasing like 'A person who...' or 'He is...'. "
+            "Weave the facts smoothly into cohesive sentences.\n"
+            "3. Grounding: Base everything you say strictly on the Knowledge Graph facts provided below. "
+            "Never invent, assume, or extrapolate unmentioned facts.\n"
+            "4. Missing Information: If the provided facts do not contain the answer, warmly and politely let the user know.\n\n"
             f"Knowledge Graph Facts:\n{facts_text}"
         )
 
@@ -77,6 +83,9 @@ class GroundedGenerator:
             for m in full_messages[1:]:
                 prompt += f"{m['role'].capitalize()}: {m['content']}\n\n"
             prompt += "Assistant:"
+
+        # Disable thinking mode for Qwen 3.5 to ensure fast, direct narrative generation
+        prompt += "<think>\n\n</think>\n"
 
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
 
