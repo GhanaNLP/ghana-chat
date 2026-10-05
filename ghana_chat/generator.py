@@ -1,7 +1,7 @@
 """Knowledge Graph Grounded Response Generator using Qwen 2B."""
 
 import time
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
@@ -40,10 +40,16 @@ class GroundedGenerator:
         query: str,
         triples: List[Dict[str, Any]],
         history: Optional[List[Dict[str, str]]] = None,
+        abbreviations: Optional[List[Tuple[str, str]]] = None,
         max_new_tokens: int = 160
     ) -> Dict[str, Any]:
         """Construct prompt and generate response directly in friendly narrative prose with think mode disabled."""
         facts_text = self.format_triples(triples)
+
+        abbrev_section = ""
+        if abbreviations:
+            abbrev_lines = [f"- {abbr}: {full}" for abbr, full in abbreviations]
+            abbrev_section = "Relevant Abbreviations:\n" + "\n".join(abbrev_lines) + "\n\n"
 
         system_msg = (
             "You are Ghana Chat, a warm, friendly, and knowledgeable assistant for Ghana. "
@@ -56,6 +62,7 @@ class GroundedGenerator:
             "3. Grounding: Base everything you say strictly on the Knowledge Graph facts provided below. "
             "Never invent, assume, or extrapolate unmentioned facts.\n"
             "4. Missing Information: If the provided facts do not contain the answer, warmly and politely let the user know.\n\n"
+            f"{abbrev_section}"
             f"Knowledge Graph Facts:\n{facts_text}"
         )
 

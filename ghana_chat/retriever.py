@@ -8,6 +8,7 @@ import os
 import re
 from typing import List, Dict, Any, Optional
 import pandas as pd
+from .abbreviations import AbbreviationResolver
 
 STOPWORDS = {
     "what", "who", "where", "when", "why", "how", "tell", "me", "about",
@@ -49,6 +50,7 @@ class HeadKGRetriever:
 
         self.data_path = data_path
         self.heads_map: Dict[str, List[Dict[str, Any]]] = {}
+        self.resolver = AbbreviationResolver()
         self.load_triples(data_path)
 
     def load_triples(self, path: str):
@@ -88,8 +90,15 @@ class HeadKGRetriever:
         print(f"Indexed {count:,} triples across {len(self.heads_map):,} unique head entities from {path}")
 
     def extract_candidates(self, query: str) -> List[str]:
-        """Extract candidate noun phrases, individual entities, and nouns from query text."""
+        """Extract candidate noun phrases, individual entities, and nouns from query text, augmented with resolved abbreviations."""
         candidates = []
+
+        # 0. Resolve abbreviations / acronyms (e.g. NDPC -> National Development Planning Commission)
+        pairs, aliases = self.resolver.resolve_query(query)
+        for alias in aliases:
+            if alias not in candidates:
+                candidates.append(alias)
+
         nlp = get_spacy_nlp()
 
         if nlp:
@@ -147,8 +156,13 @@ class HeadKGRetriever:
         matched = []
         seen = set()
 
-        # Primary pass: multi-word and exact phrase matches
+        # Primary pass: exact and multi-word candidate matches
+        matched = []
+        seen = set()
+        per_cand_cap = max(3, min(5, max_triples // max(1, len(candidates))))
+
         for cand in candidates:
+            cand_count = 0
             if cand in self.heads_map:
                 for item in self.heads_map[cand]:
                     if country_filter and item["country"].lower() != country_filter.lower():
@@ -157,7 +171,8 @@ class HeadKGRetriever:
                     if t_key not in seen:
                         seen.add(t_key)
                         matched.append(item)
-                        if len(matched) >= max_triples:
+                        cand_count += 1
+                        if cand_count >= per_cand_cap or len(matched) >= max_triples:
                             break
             if len(matched) >= max_triples:
                 break
@@ -208,6 +223,9 @@ class HeadKGRetriever:
             if not already_known:
                 new_entities.append(c)
 
+        # Check for abbreviations in this query
+        abbrev_pairs, _ = self.resolver.resolve_query(query)
+
         # Case A: Pure follow-up within existing context (no new entities introduced)
         if len(new_entities) == 0 and len(history_set) > 0:
             return {
@@ -218,6 +236,7 @@ class HeadKGRetriever:
                 "new_triples": [],
                 "all_triples": existing_list,
                 "active_triples": existing_list,
+                "abbreviations": abbrev_pairs,
                 "num_triples": len(existing_list)
             }
 
@@ -225,8 +244,10 @@ class HeadKGRetriever:
         targets = new_entities if new_entities else query_candidates
         matched_new = []
         seen = set()
+        per_cand_cap = max(3, max_triples // max(1, len(targets)))
 
         for cand in targets:
+            cand_count = 0
             if cand in self.heads_map:
                 for item in self.heads_map[cand]:
                     if country_filter and item["country"].lower() != country_filter.lower():
@@ -235,7 +256,8 @@ class HeadKGRetriever:
                     if t_key not in seen:
                         seen.add(t_key)
                         matched_new.append(item)
-                        if len(matched_new) >= max_triples:
+                        cand_count += 1
+                        if cand_count >= per_cand_cap or len(matched_new) >= max_triples:
                             break
             if len(matched_new) >= max_triples:
                 break
@@ -250,19 +272,34 @@ class HeadKGRetriever:
                 country_filter=None
             )
 
+        # Invalidate or augment with explicit definition triples for detected abbreviations
+        definition_triples = []
+        for abbr, full in abbrev_pairs:
+            definition_triples.append({
+                "head": abbr,
+                "relation": "stands for",
+                "tail": full,
+                "country": "Ghana"
+            })
+            definition_triples.append({
+                "head": full,
+                "relation": "abbreviated as",
+                "tail": abbr,
+                "country": "Ghana"
+            })
+
         updated_entities = list(history_set.union(set(targets)))
-        # For a new topic or new entity query, the active grounding context for the prompt
-        # must be the facts about the new entities (not polluted by previous unrelated topics)
-        active_triples = matched_new if matched_new else []
-        all_triples = existing_list + matched_new
+        active_triples = definition_triples + (matched_new if matched_new else [])
+        all_triples = existing_list + definition_triples + matched_new
 
         return {
             "query": query,
             "is_followup": (len(history_set) > 0 and len(new_entities) == 0),
             "new_entities": new_entities if new_entities else targets,
             "all_entities": updated_entities,
-            "new_triples": matched_new,
+            "new_triples": definition_triples + matched_new,
             "all_triples": all_triples,
             "active_triples": active_triples,
+            "abbreviations": abbrev_pairs,
             "num_triples": len(active_triples)
         }

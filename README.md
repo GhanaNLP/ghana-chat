@@ -1,4 +1,4 @@
-# Ghana Chat 🇬🇭
+# Ghana Chat
 
 **Head-Focused Knowledge Graph Grounded QA powered by Qwen 2B on NVIDIA H200**
 

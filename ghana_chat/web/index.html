@@ -4,242 +4,324 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Ghana Chat</title>
-  <meta name="description" content="A friendly, factual assistant for Ghana.">
+  <meta name="description" content="Ghana Chat: Truthful question answering strictly grounded on a Ghanaian Knowledge Graph powered by Qwen 2B on NVIDIA H200.">
   <style>
     :root {
-      --bg: #f7f7f7;
-      --card-bg: #ffffff;
-      --text: #222222;
-      --text-secondary: #717171;
-      --border: #ebebeb;
-      --border-focus: #222222;
-      --user-bubble: #222222;
-      --user-text: #ffffff;
-      --assistant-bubble: #ffffff;
-      --assistant-border: #ebebeb;
-      --chip-bg: #ffffff;
-      --chip-border: #dddddd;
-      --chip-hover: #f0f0f0;
-      --green: #00875a;
-      --shadow-sm: 0 1px 3px rgba(0,0,0,0.04);
-      --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
-      --shadow-float: 0 6px 20px rgba(0,0,0,0.07);
+      --bg-app: #111111;
+      --bg-sidebar: #181818;
+      --bg-chat: #1e1e1e;
+      --bg-input: #262626;
+      --bg-bubble-user: #2d3748;
+      --bg-bubble-bot: #232323;
+      --border: #2d2d2d;
+      --border-light: #383838;
+      --text: #ededed;
+      --text-muted: #9e9e9e;
+      --text-subtle: #707070;
+      --primary: #00875a;
+      --primary-hover: #00a36d;
+      --accent: #fcd116;
+      --card-bg: #232323;
+      --card-hover: #2a2a2a;
+      --radius-sm: 8px;
+      --radius-md: 12px;
+      --radius-lg: 18px;
+      --radius-pill: 9999px;
+      --shadow: 0 4px 20px rgba(0,0,0,0.3);
     }
 
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #141414;
-        --card-bg: #1e1e1e;
-        --text: #f0f0f0;
-        --text-secondary: #a0a0a0;
-        --border: #2c2c2c;
-        --border-focus: #ffffff;
-        --user-bubble: #2d4f3b; /* Subtle dark Ghana green */
-        --user-text: #ffffff;
-        --assistant-bubble: #1e1e1e;
-        --assistant-border: #2a2a2a;
-        --chip-bg: #1e1e1e;
-        --chip-border: #333333;
-        --chip-hover: #292929;
-        --green: #36b37e;
-        --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
-        --shadow-md: 0 4px 16px rgba(0,0,0,0.4);
-        --shadow-float: 0 6px 20px rgba(0,0,0,0.5);
-      }
+    [data-theme="light"] {
+      --bg-app: #f4f4f5;
+      --bg-sidebar: #fafafa;
+      --bg-chat: #ffffff;
+      --bg-input: #f4f4f5;
+      --bg-bubble-user: #18181b;
+      --bg-bubble-bot: #ffffff;
+      --border: #e4e4e7;
+      --border-light: #f4f4f5;
+      --text: #18181b;
+      --text-muted: #71717a;
+      --text-subtle: #a1a1aa;
+      --primary: #00875a;
+      --primary-hover: #006b47;
+      --card-bg: #ffffff;
+      --card-hover: #f9f9fb;
+      --shadow: 0 4px 20px rgba(0,0,0,0.06);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      background: var(--bg);
+      background: var(--bg-app);
       color: var(--text);
       line-height: 1.5;
       height: 100vh;
       height: 100dvh;
       display: flex;
-      justify-content: center;
       overflow: hidden;
     }
 
-    .chat-app {
-      width: 100%;
-      max-width: 800px;
-      height: 100%;
+    /* Layout */
+    .app-container {
       display: flex;
-      flex-direction: column;
-      background: var(--card-bg);
-      border-left: 1px solid var(--border);
-      border-right: 1px solid var(--border);
+      width: 100%;
+      height: 100%;
+      position: relative;
     }
 
-    /* Top Navigation Bar */
-    .chat-header {
-      height: 64px;
-      padding: 0 1.25rem;
+    /* Sidebar */
+    .sidebar {
+      width: 260px;
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transition: transform 0.25s ease, width 0.25s ease;
+      z-index: 20;
+    }
+
+    .sidebar-header {
+      padding: 1.1rem 1rem;
       display: flex;
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid var(--border);
-      background: var(--card-bg);
-      z-index: 10;
     }
 
-    .brand {
+    .app-brand {
       display: flex;
       align-items: center;
-      gap: 0.65rem;
-    }
-
-    .brand-avatar {
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
-      background: #006b3f; /* Ghana green */
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #fcd116; /* Gold star */
-      font-size: 1.1rem;
-      font-weight: 700;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .brand-meta h1 {
+      gap: 0.6rem;
       font-size: 1.05rem;
       font-weight: 700;
       letter-spacing: -0.01em;
-      line-height: 1.2;
     }
 
-    .brand-status {
-      display: flex;
-      align-items: center;
-      gap: 0.35rem;
-      font-size: 0.76rem;
-      color: var(--text-secondary);
-    }
-
-    .status-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--green);
-    }
-
-    .header-actions {
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-    }
-
-    .btn-icon {
-      background: transparent;
-      border: 1px solid var(--border);
-      color: var(--text);
-      width: 36px;
-      height: 36px;
-      border-radius: 50%;
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-sm);
+      background: var(--primary);
+      color: #fff;
       display: flex;
       align-items: center;
       justify-content: center;
+      font-size: 0.95rem;
+    }
+
+    .btn-new-chat {
+      margin: 0.85rem 1rem 0.5rem;
+      background: var(--primary);
+      color: #ffffff;
+      border: none;
+      border-radius: var(--radius-md);
+      padding: 0.65rem 0.9rem;
+      font-size: 0.88rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
       cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
+      transition: background 0.15s, transform 0.05s;
     }
 
-    .btn-icon:hover {
-      background: var(--chip-hover);
-      border-color: var(--chip-border);
-    }
+    .btn-new-chat:hover { background: var(--primary-hover); }
+    .btn-new-chat:active { transform: scale(0.98); }
 
-    /* Chat Messages View */
-    .chat-messages {
+    .sidebar-chats {
       flex: 1;
       overflow-y: auto;
-      padding: 1.5rem 1.25rem;
+      padding: 0.5rem 0.75rem;
       display: flex;
       flex-direction: column;
-      gap: 1.25rem;
+      gap: 0.25rem;
+    }
+
+    .sidebar-section-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-subtle);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 0.6rem 0.5rem 0.3rem;
+    }
+
+    .chat-item {
+      padding: 0.6rem 0.65rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.86rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    .chat-item:hover, .chat-item.active {
+      background: var(--card-hover);
+      color: var(--text);
+    }
+
+    .sidebar-footer {
+      padding: 0.85rem 1rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    .theme-toggle {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: var(--radius-sm);
+      padding: 0.35rem 0.6rem;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+
+    /* Main Chat Content */
+    .main-chat {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      background: var(--bg-chat);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Top Navbar */
+    .chat-navbar {
+      height: 56px;
+      padding: 0 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--bg-chat);
+      z-index: 10;
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .btn-toggle-sidebar {
+      background: transparent;
+      border: none;
+      color: var(--text);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      padding: 0.3rem;
+      border-radius: var(--radius-sm);
+    }
+
+    .nav-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    .nav-model-pill {
+      font-size: 0.72rem;
+      font-weight: 600;
+      background: var(--bg-input);
+      color: var(--text-muted);
+      padding: 0.2rem 0.55rem;
+      border-radius: var(--radius-pill);
+      border: 1px solid var(--border);
+    }
+
+    /* Messages Feed */
+    .messages-feed {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
       scroll-behavior: smooth;
     }
 
-    /* Welcome / Empty State */
-    .welcome-container {
-      margin: auto 0;
-      text-align: center;
-      padding: 2rem 1rem;
+    .feed-inner {
+      max-width: 760px;
+      width: 100%;
+      margin: 0 auto;
       display: flex;
       flex-direction: column;
-      align-items: center;
+      gap: 1.25rem;
     }
 
-    .welcome-icon {
-      font-size: 2.8rem;
-      margin-bottom: 0.75rem;
+    /* Welcome Hero */
+    .welcome-hero {
+      margin: auto auto;
+      text-align: center;
+      padding: 2.5rem 1rem;
+      max-width: 600px;
     }
 
-    .welcome-title {
-      font-size: 1.75rem;
+    .hero-title {
+      font-size: 2rem;
       font-weight: 700;
       letter-spacing: -0.02em;
-      margin-bottom: 0.4rem;
+      margin-bottom: 0.5rem;
     }
 
-    .welcome-sub {
-      color: var(--text-secondary);
+    .hero-subtitle {
+      color: var(--text-muted);
       font-size: 1rem;
-      max-width: 440px;
       margin-bottom: 2rem;
     }
 
-    .suggestions-grid {
+    .starter-cards {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: 0.75rem;
-      width: 100%;
-      max-width: 620px;
-    }
-
-    .suggestion-card {
-      background: var(--chip-bg);
-      border: 1px solid var(--chip-border);
-      border-radius: 14px;
-      padding: 1rem 1.1rem;
       text-align: left;
+    }
+
+    .starter-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 1rem 1.1rem;
       cursor: pointer;
-      transition: border-color 0.15s, box-shadow 0.15s, transform 0.05s;
+      transition: border-color 0.15s, background 0.15s;
     }
 
-    .suggestion-card:hover {
-      border-color: var(--border-focus);
-      box-shadow: var(--shadow-sm);
+    .starter-card:hover {
+      border-color: var(--border-light);
+      background: var(--card-hover);
     }
 
-    .suggestion-card:active {
-      transform: scale(0.99);
-    }
-
-    .suggestion-title {
+    .starter-card-title {
+      font-size: 0.9rem;
       font-weight: 600;
-      font-size: 0.92rem;
-      margin-bottom: 0.2rem;
+      margin-bottom: 0.25rem;
     }
 
-    .suggestion-preview {
-      font-size: 0.82rem;
-      color: var(--text-secondary);
+    .starter-card-desc {
+      font-size: 0.8rem;
+      color: var(--text-muted);
     }
 
     /* Message Rows */
     .msg-row {
       display: flex;
+      gap: 0.85rem;
       width: 100%;
-      animation: msgIn 0.2s ease-out;
-    }
-
-    @keyframes msgIn {
-      from { opacity: 0; transform: translateY(6px); }
-      to { opacity: 1; transform: translateY(0); }
     }
 
     .msg-row.user {
@@ -250,258 +332,367 @@
       justify-content: flex-start;
     }
 
-    .bubble {
+    .msg-avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.78rem;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .msg-content {
       max-width: 82%;
-      padding: 0.9rem 1.15rem;
-      font-size: 1rem;
-      line-height: 1.55;
-      border-radius: 18px;
+    }
+
+    .bubble {
+      padding: 0.85rem 1.15rem;
+      border-radius: var(--radius-lg);
+      font-size: 0.96rem;
+      line-height: 1.6;
     }
 
     .msg-row.user .bubble {
-      background: var(--user-bubble);
-      color: var(--user-text);
+      background: var(--bg-bubble-user);
+      color: #ffffff;
       border-bottom-right-radius: 4px;
-      box-shadow: var(--shadow-sm);
     }
 
     .msg-row.assistant .bubble {
-      background: var(--assistant-bubble);
+      background: var(--bg-bubble-bot);
       color: var(--text);
-      border: 1px solid var(--assistant-border);
+      border: 1px solid var(--border);
       border-bottom-left-radius: 4px;
-      box-shadow: var(--shadow-sm);
     }
 
     .bubble p {
-      margin-bottom: 0.65rem;
+      margin-bottom: 0.75rem;
     }
 
     .bubble p:last-child {
       margin-bottom: 0;
     }
 
-    /* Typing Dots Animation */
+    /* Copy Button */
+    .msg-actions {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.35rem;
+      padding-left: 0.25rem;
+    }
+
+    .btn-action-icon {
+      background: transparent;
+      border: none;
+      color: var(--text-subtle);
+      font-size: 0.75rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      padding: 0.2rem 0.4rem;
+      border-radius: var(--radius-sm);
+    }
+
+    .btn-action-icon:hover {
+      color: var(--text);
+      background: var(--card-hover);
+    }
+
+    /* Typing Dots */
     .typing-indicator {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      padding: 0.25rem 0.1rem;
+      gap: 5px;
+      padding: 0.4rem 0.2rem;
     }
 
-    .typing-dot {
+    .dot {
       width: 6px;
       height: 6px;
-      background: var(--text-secondary);
+      background: var(--text-muted);
       border-radius: 50%;
-      animation: pulseDot 1.4s infinite ease-in-out both;
+      animation: blink 1.4s infinite both;
     }
 
-    .typing-dot:nth-child(1) { animation-delay: -0.32s; }
-    .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+    .dot:nth-child(1) { animation-delay: -0.32s; }
+    .dot:nth-child(2) { animation-delay: -0.16s; }
 
-    @keyframes pulseDot {
-      0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-      40% { transform: scale(1); opacity: 1; }
+    @keyframes blink {
+      0%, 80%, 100% { opacity: 0.3; transform: scale(0.7); }
+      40% { opacity: 1; transform: scale(1); }
     }
 
-    /* Floating Input Footer */
-    .chat-footer {
-      padding: 0.85rem 1.25rem 1.1rem;
-      background: var(--card-bg);
+    /* Input Footer */
+    .chat-input-area {
+      padding: 0.75rem 1rem 1rem;
+      background: var(--bg-chat);
       border-top: 1px solid var(--border);
     }
 
-    .input-pill {
+    .input-box-wrapper {
+      max-width: 760px;
+      margin: 0 auto;
+    }
+
+    .input-container {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-pill);
+      padding: 0.4rem 0.45rem 0.4rem 1.25rem;
       display: flex;
       align-items: center;
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 28px;
-      padding: 0.35rem 0.45rem 0.35rem 1.25rem;
-      box-shadow: var(--shadow-sm);
+      gap: 0.5rem;
+      box-shadow: var(--shadow);
       transition: border-color 0.15s, box-shadow 0.15s;
     }
 
-    .input-pill:focus-within {
-      border-color: var(--border-focus);
+    .input-container:focus-within {
+      border-color: var(--border-light);
       background: var(--card-bg);
-      box-shadow: var(--shadow-md);
     }
 
-    .input-pill input {
+    .input-container input {
       flex: 1;
       border: none;
       background: transparent;
-      outline: none;
-      font-size: 0.98rem;
       color: var(--text);
+      font-size: 0.96rem;
+      outline: none;
       font-family: inherit;
     }
 
-    .input-pill input::placeholder {
-      color: var(--text-secondary);
-    }
-
     .btn-send {
-      width: 38px;
-      height: 38px;
+      width: 36px;
+      height: 36px;
       border-radius: 50%;
+      background: var(--primary);
+      color: #fff;
       border: none;
-      background: var(--user-bubble);
-      color: #ffffff;
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      transition: transform 0.1s, opacity 0.15s;
       flex-shrink: 0;
+      transition: background 0.15s, transform 0.05s;
     }
 
-    .btn-send:hover {
-      opacity: 0.9;
-    }
+    .btn-send:hover { background: var(--primary-hover); }
+    .btn-send:active { transform: scale(0.95); }
+    .btn-send:disabled { opacity: 0.35; cursor: not-allowed; }
 
-    .btn-send:active {
-      transform: scale(0.94);
-    }
-
-    .btn-send:disabled {
-      opacity: 0.35;
-      cursor: not-allowed;
-    }
-
-    .footer-note {
+    .input-disclaimer {
       text-align: center;
       font-size: 0.75rem;
-      color: var(--text-secondary);
-      margin-top: 0.5rem;
+      color: var(--text-subtle);
+      margin-top: 0.45rem;
+    }
+
+    /* Mobile responsive */
+    @media (max-width: 768px) {
+      .sidebar {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        transform: translateX(-100%);
+        box-shadow: 2px 0 16px rgba(0,0,0,0.4);
+      }
+      .sidebar.open {
+        transform: translateX(0);
+      }
+      .msg-content {
+        max-width: 90%;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="chat-app">
-    <!-- Header -->
-    <header class="chat-header">
-      <div class="brand">
-        <div class="brand-avatar">★</div>
-        <div class="brand-meta">
-          <h1>Ghana Chat</h1>
-          <div class="brand-status">
-            <span class="status-dot"></span>
-            <span>Online</span>
-          </div>
+  <div class="app-container">
+    <!-- Left Sidebar -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="app-brand">
+          <div class="brand-icon">★</div>
+          <span>Ghana Chat</span>
         </div>
       </div>
-      <div class="header-actions">
-        <button id="btn-new" class="btn-icon" title="Start new conversation" aria-label="New chat">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 5v14M5 12h14"/>
-          </svg>
-        </button>
-      </div>
-    </header>
 
-    <!-- Message Stream -->
-    <div id="chat-messages" class="chat-messages">
-      <div id="welcome" class="welcome-container">
-        <div class="welcome-icon">🇬🇭</div>
-        <h2 class="welcome-title">Welcome to Ghana Chat</h2>
-        <p class="welcome-sub">Ask anything about Ghanaian leaders, institutions, history, agriculture, and policies.</p>
-        <div class="suggestions-grid">
-          <div class="suggestion-card" data-q="Who is the chairperson of the NDPC, and where is its headquarters located?">
-            <div class="suggestion-title">National Planning</div>
-            <div class="suggestion-preview">Who leads the NDPC & where is it based?</div>
-          </div>
-          <div class="suggestion-card" data-q="What is the Coordinated Programme for Social and Economic Development?">
-            <div class="suggestion-title">National Agenda</div>
-            <div class="suggestion-preview">What is the Coordinated Programme?</div>
-          </div>
-          <div class="suggestion-card" data-q="Tell me about Telecel Ghana.">
-            <div class="suggestion-title">Telecommunications</div>
-            <div class="suggestion-preview">What are Telecel Ghana's initiatives?</div>
-          </div>
-          <div class="suggestion-card" data-q="Who is Asiedu Nketia?">
-            <div class="suggestion-title">Political Figures</div>
-            <div class="suggestion-preview">Learn about Asiedu Nketia's role.</div>
-          </div>
-        </div>
-      </div>
-    </div>
+      <button id="btn-new" class="btn-new-chat">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <span>New Chat</span>
+      </button>
 
-    <!-- Input Footer -->
-    <footer class="chat-footer">
-      <form id="chat-form">
-        <div class="input-pill">
-          <input type="text" id="query-input" placeholder="Message Ghana Chat..." required autocomplete="off" />
-          <button type="submit" id="btn-send" class="btn-send" aria-label="Send message">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="19" x2="12" y2="5"></line>
-              <polyline points="5 12 12 5 19 12"></polyline>
+      <div class="sidebar-section-title">Recent Chats</div>
+      <div id="chats-list" class="sidebar-chats">
+        <div class="chat-item active">Current Conversation</div>
+      </div>
+
+      <div class="sidebar-footer">
+        <span>Qwen 2B on H200</span>
+        <button id="btn-theme" class="theme-toggle">Theme</button>
+      </div>
+    </aside>
+
+    <!-- Main Chat Workspace -->
+    <main class="main-chat">
+      <nav class="chat-navbar">
+        <div class="nav-left">
+          <button id="btn-menu" class="btn-toggle-sidebar" aria-label="Toggle sidebar">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
             </svg>
           </button>
+          <span id="current-chat-title" class="nav-title">New Conversation</span>
         </div>
-      </form>
-      <div class="footer-note">Ghana Chat responds with factual answers about Ghana.</div>
-    </footer>
+        <div class="nav-model-pill">Qwen 2B • H200</div>
+      </nav>
+
+      <!-- Message Stream -->
+      <div id="messages-feed" class="messages-feed">
+        <div class="feed-inner">
+          <div id="welcome-hero" class="welcome-hero">
+            <h2 class="hero-title">How can I help you today?</h2>
+            <p class="hero-subtitle">Ask anything about Ghanaian leaders, institutions, history, agriculture, and policies.</p>
+            <div class="starter-cards">
+              <div class="starter-card" data-q="Who is the chairperson of the NDPC, and where is its headquarters located?">
+                <div class="starter-card-title">National Planning</div>
+                <div class="starter-card-desc">Who chairs the NDPC and where is it based?</div>
+              </div>
+              <div class="starter-card" data-q="What is the Coordinated Programme for Social and Economic Development?">
+                <div class="starter-card-title">National Agenda</div>
+                <div class="starter-card-desc">Explore the national development framework.</div>
+              </div>
+              <div class="starter-card" data-q="Tell me about Telecel Ghana.">
+                <div class="starter-card-title">Telecommunications</div>
+                <div class="starter-card-desc">Learn about Telecel Ghana's initiatives.</div>
+              </div>
+              <div class="starter-card" data-q="Who is Asiedu Nketia?">
+                <div class="starter-card-title">Leadership</div>
+                <div class="starter-card-desc">Overview of Asiedu Nketia's political role.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input Bar -->
+      <footer class="chat-input-area">
+        <div class="input-box-wrapper">
+          <form id="chat-form">
+            <div class="input-container">
+              <input type="text" id="user-input" placeholder="Message Ghana Chat..." required autocomplete="off" />
+              <button type="submit" id="btn-send" class="btn-send" aria-label="Send">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <line x1="12" y1="19" x2="12" y2="5"></line>
+                  <polyline points="5 12 12 5 19 12"></polyline>
+                </svg>
+              </button>
+            </div>
+          </form>
+          <div class="input-disclaimer">Ghana Chat provides grounded information on Ghana.</div>
+        </div>
+      </footer>
+    </main>
   </div>
 
   <script>
     const DEFAULT_API = 'https://ghana-chat.ghanaopenai.org';
 
-    // State
+    // Conversation State
     let chatHistory = [];
     let historyEntities = [];
     let conversationTriples = [];
 
-    const chatMessages = document.getElementById('chat-messages');
-    const welcome = document.getElementById('welcome');
+    const messagesFeed = document.getElementById('messages-feed');
+    const feedInner = document.querySelector('.feed-inner');
+    const welcomeHero = document.getElementById('welcome-hero');
     const chatForm = document.getElementById('chat-form');
-    const queryInput = document.getElementById('query-input');
+    const userInput = document.getElementById('user-input');
     const btnSend = document.getElementById('btn-send');
     const btnNew = document.getElementById('btn-new');
+    const btnMenu = document.getElementById('btn-menu');
+    const sidebar = document.getElementById('sidebar');
+    const currentChatTitle = document.getElementById('current-chat-title');
+    const btnTheme = document.getElementById('btn-theme');
 
-    // Suggestions handler
-    document.querySelectorAll('.suggestion-card').forEach(card => {
+    // Sidebar Mobile Toggle
+    btnMenu.addEventListener('click', () => {
+      sidebar.classList.toggle('open');
+    });
+
+    // Theme Toggle
+    btnTheme.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme');
+      const target = (current === 'light') ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', target);
+      localStorage.setItem('ghana_chat_theme', target);
+    });
+
+    // Restore Theme
+    const savedTheme = localStorage.getItem('ghana_chat_theme');
+    if (savedTheme) {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    }
+
+    // Starter Cards Handler
+    document.querySelectorAll('.starter-card').forEach(card => {
       card.addEventListener('click', () => {
         const q = card.getAttribute('data-q');
-        if (q) {
-          sendMessage(q);
-        }
+        if (q) sendMessage(q);
       });
     });
 
-    // Reset Chat
+    // New Chat Button
     btnNew.addEventListener('click', () => {
       chatHistory = [];
       historyEntities = [];
       conversationTriples = [];
-      chatMessages.innerHTML = '';
-      chatMessages.appendChild(welcome);
-      welcome.style.display = 'flex';
-      queryInput.focus();
+      feedInner.innerHTML = '';
+      feedInner.appendChild(welcomeHero);
+      welcomeHero.style.display = 'block';
+      currentChatTitle.textContent = 'New Conversation';
+      userInput.focus();
+      if (window.innerWidth <= 768) sidebar.classList.remove('open');
     });
 
-    // Form submit
+    // Form Submit
     chatForm.addEventListener('submit', (e) => {
       e.preventDefault();
-      const message = queryInput.value.trim();
+      const message = userInput.value.trim();
       if (!message) return;
       sendMessage(message);
     });
 
     async function sendMessage(message) {
-      if (welcome && welcome.parentElement) {
-        welcome.style.display = 'none';
+      if (welcomeHero && welcomeHero.parentElement) {
+        welcomeHero.style.display = 'none';
       }
 
-      // 1. Add User Bubble
+      // Update Nav title on first message
+      if (chatHistory.length === 0) {
+        currentChatTitle.textContent = message.slice(0, 32) + (message.length > 32 ? '...' : '');
+      }
+
+      // 1. Render User Message
       appendMessage('user', message);
-      queryInput.value = '';
+      userInput.value = '';
 
       btnSend.disabled = true;
 
-      // 2. Add Assistant Thinking Bubble with pulsing dots
+      // 2. Render Assistant Loading Row with Dots
       const loadingRow = appendLoading();
 
       try {
@@ -524,29 +715,23 @@
 
         const data = await res.json();
 
-        // Topic Switch Management:
-        // If a new topic was introduced (is_followup is false), reset backend context to the new topic
-        // while keeping the visible chat bubbles intact on screen.
+        // Topic switch management
         if (!data.is_followup && chatHistory.length > 0) {
           chatHistory = [];
           historyEntities = [];
           conversationTriples = [];
         }
 
-        // Update conversation state for follow-ups within the active topic
         chatHistory.push({ role: 'user', content: message });
         chatHistory.push({ role: 'assistant', content: data.answer });
         historyEntities = data.all_entities || historyEntities;
         conversationTriples = data.all_triples || conversationTriples;
 
-        // Replace typing animation with the actual narrative response and reasoning
-        updateAssistantBubble(loadingRow, data);
+        // Render Answer
+        updateAssistantRow(loadingRow, data.answer);
 
       } catch (err) {
-        updateAssistantBubble(
-          loadingRow,
-          `Sorry, I had trouble reaching my knowledge server. Please check your connection and try again.`
-        );
+        updateAssistantRow(loadingRow, 'Sorry, I had trouble reaching my server. Please try again in a moment.');
       } finally {
         btnSend.disabled = false;
         scrollBottom();
@@ -557,12 +742,16 @@
       const row = document.createElement('div');
       row.className = `msg-row ${role}`;
 
+      const content = document.createElement('div');
+      content.className = 'msg-content';
+
       const bubble = document.createElement('div');
       bubble.className = 'bubble';
       bubble.textContent = text;
 
-      row.appendChild(bubble);
-      chatMessages.appendChild(row);
+      content.appendChild(bubble);
+      row.appendChild(content);
+      feedInner.appendChild(row);
       scrollBottom();
       return row;
     }
@@ -571,29 +760,35 @@
       const row = document.createElement('div');
       row.className = 'msg-row assistant';
 
+      const avatar = document.createElement('div');
+      avatar.className = 'msg-avatar';
+      avatar.textContent = '★';
+
+      const content = document.createElement('div');
+      content.className = 'msg-content';
+
       const bubble = document.createElement('div');
       bubble.className = 'bubble';
       bubble.innerHTML = `
         <div class="typing-indicator">
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
-          <div class="typing-dot"></div>
+          <div class="dot"></div>
+          <div class="dot"></div>
+          <div class="dot"></div>
         </div>
       `;
 
-      row.appendChild(bubble);
-      chatMessages.appendChild(row);
+      content.appendChild(bubble);
+      row.appendChild(avatar);
+      row.appendChild(content);
+      feedInner.appendChild(row);
       scrollBottom();
       return row;
     }
 
-    function updateAssistantBubble(row, data) {
+    function updateAssistantRow(row, answerText) {
       const bubble = row.querySelector('.bubble');
       bubble.innerHTML = '';
 
-      const answerText = (typeof data === 'string') ? data : (data.answer || '');
-
-      // Format clean narrative paragraphs for the final answer
       const paragraphs = answerText.split(/\n\s*\n/).filter(p => p.trim().length > 0);
       if (paragraphs.length > 0) {
         paragraphs.forEach(p => {
@@ -606,10 +801,30 @@
         para.textContent = answerText;
         bubble.appendChild(para);
       }
+
+      // Add clean copy button
+      const actions = document.createElement('div');
+      actions.className = 'msg-actions';
+      const btnCopy = document.createElement('button');
+      btnCopy.className = 'btn-action-icon';
+      btnCopy.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+        <span>Copy</span>
+      `;
+      btnCopy.addEventListener('click', () => {
+        navigator.clipboard.writeText(answerText);
+        btnCopy.querySelector('span').textContent = 'Copied!';
+        setTimeout(() => { btnCopy.querySelector('span').textContent = 'Copy'; }, 2000);
+      });
+      actions.appendChild(btnCopy);
+      row.querySelector('.msg-content').appendChild(actions);
     }
 
     function scrollBottom() {
-      chatMessages.scrollTop = chatMessages.scrollHeight;
+      messagesFeed.scrollTop = messagesFeed.scrollHeight;
     }
   </script>
 </body>

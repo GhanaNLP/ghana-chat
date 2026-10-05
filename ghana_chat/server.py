@@ -164,7 +164,12 @@ async def ask_question(req: QuestionRequest):
         history_dicts = []
 
     # 3. Generate grounded response with Qwen 2B in friendly narrative prose (no think mode)
-    gen_res = generator.generate(query=query, triples=active_triples, history=history_dicts)
+    gen_res = generator.generate(
+        query=query,
+        triples=active_triples,
+        history=history_dicts,
+        abbreviations=ret_res.get("abbreviations", [])
+    )
 
     return QuestionResponse(
         question=query,
