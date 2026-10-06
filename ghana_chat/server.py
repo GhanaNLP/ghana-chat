@@ -89,7 +89,7 @@ class QuestionRequest(BaseModel):
     question: Optional[str] = Field(default=None, description="The user query or question")
     message: Optional[str] = Field(default=None, description="Alternative message field")
     history: Optional[List[ChatMessage]] = Field(default=[], description="Prior conversation turns")
-    max_sources: Optional[int] = Field(default=30, ge=1, le=100)
+    max_sources: Optional[int] = Field(default=300, ge=1, le=500)
     country_filter: Optional[str] = Field(default="Ghana")
     stream: Optional[bool] = Field(default=False, description="Stream response tokens via Server-Sent Events (SSE)")
 
@@ -186,7 +186,7 @@ async def ask_question(req: QuestionRequest):
         ret_res = retriever.process_turn(
             query=query,
             history_entities=history_prompts,
-            max_sources=req.max_sources or 30
+            max_sources=req.max_sources or 300
         )
     except Exception as exc:
         logger.error("Retrieval failed for %r: %s", query, exc, exc_info=True)
