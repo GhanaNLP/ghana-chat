@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Ghana Chat</title>
-  <meta name="description" content="Ghana Chat: Truthful question answering strictly grounded on a Ghanaian Knowledge Graph powered by Qwen 2B on NVIDIA H200.">
+  <meta name="description" content="Ghana Chat: Truthful question answering strictly grounded on a Ghanaian Knowledge Graph powered by Gemma 4 2B on NVIDIA H200.">
   <style>
     :root {
       --bg-app: #f7f7f8;
@@ -604,7 +604,7 @@
       </div>
 
       <div class="sidebar-footer">
-        <span>Qwen 2B on H200</span>
+        <span>Gemma 4 2B on H200</span>
         <button id="btn-theme" class="theme-toggle">Theme</button>
       </div>
     </aside>
@@ -622,7 +622,7 @@
           </button>
           <span id="current-chat-title" class="nav-title">New Conversation</span>
         </div>
-        <div class="nav-model-pill">Qwen 2B • H200</div>
+        <div class="nav-model-pill">Gemma 4 2B • H200</div>
       </nav>
 
       <!-- Message Stream -->
@@ -723,6 +723,20 @@
     const savedTheme = localStorage.getItem('ghana_chat_theme') || 'light';
     document.documentElement.setAttribute('data-theme', savedTheme);
     updateThemeBtn(savedTheme);
+
+    // Dynamic model label from /health
+    fetch(`${DEFAULT_API}/health`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.model) {
+          const modelShort = data.model.split('/').pop();
+          const pill = document.querySelector('.nav-model-pill');
+          if (pill) pill.textContent = `${modelShort} • H200`;
+          const footerSpan = document.querySelector('.sidebar-footer span');
+          if (footerSpan) footerSpan.textContent = `${modelShort} on H200`;
+        }
+      })
+      .catch(err => console.log('Health check info:', err));
 
     // Starter Cards Handler
     document.querySelectorAll('.starter-card').forEach(card => {
