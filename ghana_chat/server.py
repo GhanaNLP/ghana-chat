@@ -14,14 +14,14 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import __version__, config
-from .noun_phrase_retriever import SentenceNounPhraseRetriever
+from .kg_retriever import VerbalizedKGRetriever
 from .generator import GroundedGenerator
 
 logger = logging.getLogger("ghana_chat.server")
 
 app = FastAPI(
     title="Ghana Chat API",
-    description="Grounded QA powered by Gemma 4 2B on NVIDIA H200",
+    description="Knowledge Graph Grounded QA powered by Gemma 4 2B on NVIDIA H200",
     version=__version__
 )
 
@@ -35,14 +35,14 @@ app.add_middleware(
 )
 
 # Lazy singletons
-_retriever: Optional[SentenceNounPhraseRetriever] = None
+_retriever: Optional[VerbalizedKGRetriever] = None
 _generator: Optional[GroundedGenerator] = None
 
 
-def get_retriever() -> SentenceNounPhraseRetriever:
+def get_retriever() -> VerbalizedKGRetriever:
     global _retriever
     if _retriever is None:
-        _retriever = SentenceNounPhraseRetriever()
+        _retriever = VerbalizedKGRetriever()
     return _retriever
 
 
@@ -89,7 +89,7 @@ class QuestionRequest(BaseModel):
     question: Optional[str] = Field(default=None, description="The user query or question")
     message: Optional[str] = Field(default=None, description="Alternative message field")
     history: Optional[List[ChatMessage]] = Field(default=[], description="Prior conversation turns")
-    max_sources: Optional[int] = Field(default=6, ge=1, le=15)
+    max_sources: Optional[int] = Field(default=30, ge=1, le=100)
     country_filter: Optional[str] = Field(default="Ghana")
     stream: Optional[bool] = Field(default=False, description="Stream response tokens via Server-Sent Events (SSE)")
 
@@ -99,6 +99,9 @@ class SourceHit(BaseModel):
     doc_id: Any = None
     sentence: str = ""
     context: str = ""
+    head: Optional[str] = ""
+    relation: Optional[str] = ""
+    tail: Optional[str] = ""
     score: float = 0.0
     matched_candidate: Optional[str] = ""
 
@@ -118,7 +121,7 @@ class QuestionResponse(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    print("Pre-loading noun-phrase sentence retriever and Gemma 4 2B generator...")
+    print("Pre-loading verbalized knowledge graph retriever and Gemma 4 2B generator...")
     try:
         get_retriever()
         get_generator()
@@ -148,16 +151,16 @@ async def health_check():
         "model": config.MODEL_ID,
         "device": config.DEVICE,
         "device_name": device_name,
-        "indexed_sentences": r.n if r else 0,
-        "retrieval": "noun-phrase inverted index"
+        "indexed_facts": r.n if r else 0,
+        "retrieval": "verbalized knowledge graph (deduplicated entity-pairs)"
     }
 
 
 @app.post("/retrieve")
 async def retrieve_sources(req: QuestionRequest):
-    """Retrieve source passages relevant to the query."""
+    """Retrieve knowledge graph facts relevant to the query."""
     retriever = get_retriever()
-    return retriever.retrieve(req.question or req.message or "", max_sources=req.max_sources or 6)
+    return retriever.retrieve(req.question or req.message or "", top_k=req.max_sources or 30)
 
 
 @app.post("/ask", response_model=QuestionResponse)
@@ -183,7 +186,7 @@ async def ask_question(req: QuestionRequest):
         ret_res = retriever.process_turn(
             query=query,
             history_entities=history_prompts,
-            max_sources=req.max_sources or 6
+            max_sources=req.max_sources or 30
         )
     except Exception as exc:
         logger.error("Retrieval failed for %r: %s", query, exc, exc_info=True)
