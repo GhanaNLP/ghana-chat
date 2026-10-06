@@ -418,22 +418,26 @@
       color: var(--text);
     }
     .facts-list {
-      margin-top: 0.5rem;
-      list-style: none;
+      margin-top: 0.6rem;
+      padding-left: 1.25rem;
       display: flex;
       flex-direction: column;
-      gap: 0.3rem;
-      max-height: 200px;
+      gap: 0.5rem;
+      max-height: 420px;
       overflow-y: auto;
     }
     .facts-item {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.82rem;
+      line-height: 1.55;
+      color: var(--text);
+      word-break: break-word;
+      white-space: normal;
+    }
+    .fact-date-badge {
+      display: inline-block;
       font-size: 0.76rem;
-      background: var(--bg-app);
-      padding: 0.3rem 0.6rem;
-      border-radius: var(--radius-sm);
-      border: 1px solid var(--border);
-      overflow-x: auto;
+      font-weight: 600;
+      margin-right: 0.35rem;
     }
     .fact-head { font-weight: 600; color: var(--primary); }
     .fact-rel { color: var(--text-muted); padding: 0 0.25rem; }

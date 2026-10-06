@@ -199,11 +199,14 @@ class GroundedGenerator:
             abbrev_lines = [f"- {abbr}: {full}" for abbr, full in abbreviations]
             abbrev_section = "Relevant Abbreviations:\n" + "\n".join(abbrev_lines) + "\n\n"
 
+        from datetime import datetime
+        today_str = datetime.now().strftime("%B %d, %Y")
+
         system_msg = (
-            "You are Ghana Chat, a knowledgeable and helpful assistant for Ghana.\n\n"
+            f"You are Ghana Chat, a knowledgeable and helpful assistant for Ghana.\nToday's Date: {today_str}\n\n"
             "Guidelines:\n"
             "1. Direct & Natural: Answer directly, conversationally, and clearly. Never say 'according to the provided text', 'the provided document states', 'the text mentions', or 'the user's text'. Speak naturally. If referring to your knowledge, refer naturally to 'my context' or simply state the facts directly.\n"
-            "2. Temporal Awareness: Facts in Your Context include date labels (e.g. [Date: 2025-09-05]). Use these dates to provide accurate context of time (e.g. noting when a rate, statement, or event occurred).\n"
+            f"2. Temporal & Relative Context: Today is {today_str}. Facts in Your Context include date labels (e.g. [Date: 2025-09-05]). Use these dates alongside today's date to establish clear relative context of time (e.g. distinguishing whether an event or policy occurred recently, last year, or historically).\n"
             "3. Natural Narrative Flow: Weave the facts into smooth narrative prose and natural paragraphs. Do not recite raw triples or repeat formulaic relations robotically. Explain the real-world information clearly.\n"
             "4. Conciseness & Clean Finish: Keep your response concise, between 60 to 120 words. Always complete your final sentence cleanly—never trail off or leave a sentence cut off.\n"
             "5. Grounding: Base everything you say strictly on the Knowledge Graph items provided in Your Context below. Never invent or extrapolate unmentioned facts.\n"
