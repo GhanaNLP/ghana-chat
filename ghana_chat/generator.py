@@ -153,15 +153,18 @@ class GroundedGenerator:
         return ents
 
     def format_sources(self, sources: List[Dict[str, Any]]) -> str:
-        """Render retrieved sentences as a numbered, citable context block."""
+        """Render retrieved knowledge graph facts with date labels as a numbered context block."""
         if not sources:
-            return "(no relevant passages were found)"
+            return "(no relevant knowledge facts found in context)"
         lines = []
         for i, s in enumerate(sources, 1):
-            text = (s.get("context") or s.get("sentence") or "").strip()
-            if text:
-                lines.append(f"[{i}] {text}")
-        return "\n".join(lines) if lines else "(no relevant passages were found)"
+            if s.get("sentence"):
+                lines.append(f"[{i}] {s['sentence']}")
+            elif s.get("head") and s.get("relation") and s.get("tail"):
+                d = s.get("date", "")
+                d_str = f"[Date: {d}] " if d and d != "Definition" else ""
+                lines.append(f'[{i}] {d_str}("{s["head"]}", "{s["relation"]}", "{s["tail"]}")')
+        return "\n".join(lines) if lines else "(no relevant knowledge facts found in context)"
 
     def _build_prompt(
         self,
@@ -199,14 +202,14 @@ class GroundedGenerator:
         system_msg = (
             "You are Ghana Chat, a knowledgeable and helpful assistant for Ghana.\n\n"
             "Guidelines:\n"
-            "1. Direct & Natural: Answer directly, clearly, and conversationally. Do NOT use formulaic preambles, artificial acknowledgments (never say 'Ghana Chat acknowledges...' or 'That is an important question...'), or robotic meta-talk. Get straight to the answer.\n"
-            "2. Natural Narrative Flow: Weave the facts into smooth narrative prose and natural paragraphs. Do NOT use bullet points, numbered lists, or robotic phrasing like 'A person who...'. Do NOT mechanically recite raw relations (never say 'is a subclass of...', 'is an instance of...', 'is a facet of...', or 'falls under the umbrella of...'). Instead, explain what the person, organization, or concept actually does in real-world terms.\n"
-            "3. Conciseness & Clean Finish: Keep your response concise, between 60 to 120 words. Always complete your final sentence cleanly—never trail off or leave a sentence cut off.\n"
-            f"{grounding_rule}\n"
-            "5. Missing Information: If the provided material does not contain the answer, simply and naturally state that you don't have that information.\n"
-            f"{not_grounded_rule}"
+            "1. Direct & Natural: Answer directly, conversationally, and clearly. Never say 'according to the provided text', 'the provided document states', 'the text mentions', or 'the user's text'. Speak naturally. If referring to your knowledge, refer naturally to 'my context' or simply state the facts directly.\n"
+            "2. Temporal Awareness: Facts in Your Context include date labels (e.g. [Date: 2025-09-05]). Use these dates to provide accurate context of time (e.g. noting when a rate, statement, or event occurred).\n"
+            "3. Natural Narrative Flow: Weave the facts into smooth narrative prose and natural paragraphs. Do not recite raw triples or repeat formulaic relations robotically. Explain the real-world information clearly.\n"
+            "4. Conciseness & Clean Finish: Keep your response concise, between 60 to 120 words. Always complete your final sentence cleanly—never trail off or leave a sentence cut off.\n"
+            "5. Grounding: Base everything you say strictly on the Knowledge Graph items provided in Your Context below. Never invent or extrapolate unmentioned facts.\n"
+            "6. Missing Information: If Your Context does not contain the answer, state plainly and naturally that you do not have that information in your context.\n\n"
             f"{abbrev_section}"
-            f"{'Source Passages' if use_sources else 'Knowledge Graph Facts'}:\n{facts_text}"
+            f"Your Context:\n{facts_text}"
         )
 
         full_messages = [{"role": "system", "content": system_msg}]

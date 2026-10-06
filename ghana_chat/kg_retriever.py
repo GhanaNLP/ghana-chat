@@ -99,6 +99,8 @@ class VerbalizedKGRetriever:
         self.relations = tab.column("relation").to_pylist()
         self.tails = tab.column("tail").to_pylist()
         self.categories = tab.column("category").to_pylist()
+        self.dates = tab.column("date").to_pylist() if "date" in tab.schema.names else [""] * len(self.texts)
+        self.doc_ids = tab.column("doc_id").to_pylist() if "doc_id" in tab.schema.names else [f"kg_{i}" for i in range(len(self.texts))]
         self.n = len(self.texts)
 
         # Build exact normalized entity index (head & tail -> list of indices)
@@ -235,6 +237,7 @@ class VerbalizedKGRetriever:
                     "head": abbr,
                     "relation": "abbreviation of",
                     "tail": full,
+                    "date": "Definition",
                     "score": 100.0,
                     "matched_candidate": abbr
                 })
@@ -254,12 +257,13 @@ class VerbalizedKGRetriever:
                     seen_pairs.add(pair_key)
                     results.append({
                         "sid": self.ids[idx],
-                        "doc_id": f"kg_{self.ids[idx]}",
+                        "doc_id": self.doc_ids[idx],
                         "sentence": self.texts[idx],
                         "context": self.texts[idx],
                         "head": h,
                         "relation": self.relations[idx],
                         "tail": t,
+                        "date": self.dates[idx],
                         "score": 10.0,
                         "matched_candidate": cand
                     })
@@ -279,12 +283,13 @@ class VerbalizedKGRetriever:
                                 seen_pairs.add(pair_key)
                                 results.append({
                                     "sid": self.ids[idx],
-                                    "doc_id": f"kg_{self.ids[idx]}",
+                                    "doc_id": self.doc_ids[idx],
                                     "sentence": self.texts[idx],
                                     "context": self.texts[idx],
                                     "head": h,
                                     "relation": self.relations[idx],
                                     "tail": t,
+                                    "date": self.dates[idx],
                                     "score": 8.0,
                                     "matched_candidate": cand
                                 })

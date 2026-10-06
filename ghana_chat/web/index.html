@@ -1031,7 +1031,32 @@
           item.className = 'facts-item';
           const span = document.createElement('span');
           span.className = 'fact-sentence';
-          span.textContent = s.sentence || s.context || '';
+
+          if (s.date && s.date !== 'Definition') {
+            const dateBadge = document.createElement('span');
+            dateBadge.className = 'fact-date-badge';
+            dateBadge.textContent = `[${s.date}] `;
+            dateBadge.style.color = '#718096';
+            dateBadge.style.fontWeight = '600';
+            dateBadge.style.marginRight = '4px';
+            span.appendChild(dateBadge);
+          } else if (s.date === 'Definition') {
+            const dateBadge = document.createElement('span');
+            dateBadge.className = 'fact-date-badge';
+            dateBadge.textContent = '[Definition] ';
+            dateBadge.style.color = '#3182ce';
+            dateBadge.style.fontWeight = '600';
+            dateBadge.style.marginRight = '4px';
+            span.appendChild(dateBadge);
+          }
+
+          const factText = document.createTextNode(
+            (s.head && s.relation)
+              ? `("${s.head}", "${s.relation}", "${s.tail}")`
+              : (s.sentence || s.context || '')
+          );
+          span.appendChild(factText);
+
           item.appendChild(span);
           list.appendChild(item);
         });

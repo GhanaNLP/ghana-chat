@@ -103,6 +103,7 @@ class SourceHit(BaseModel):
     relation: Optional[str] = ""
     tail: Optional[str] = ""
     score: float = 0.0
+    date: Optional[str] = ""
     matched_candidate: Optional[str] = ""
 
 
