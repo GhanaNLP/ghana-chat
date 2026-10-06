@@ -1,4 +1,4 @@
-# Ghana Chat 🇬🇭
+# Ghana Chat
 
 **An Open-Source, Customizable Grounded LLM Chat Assistant Built for Ghana's Context.**
 
