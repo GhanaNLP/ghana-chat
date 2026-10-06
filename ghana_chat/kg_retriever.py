@@ -43,6 +43,14 @@ GENERIC_ANAPHORA = {
 }
 
 
+def stem_token(t: str) -> str:
+    """Normalize common Ghanaian surname spelling variations (e.g. Nketiah -> Nketia)."""
+    t = t.lower().strip()
+    if t.endswith("h") and len(t) > 4:
+        return t[:-1]
+    return t
+
+
 def verbalize(h: str, r: str, t: str) -> str:
     h, t = h.strip(), t.strip()
     rl = r.strip().lower()
@@ -270,7 +278,36 @@ class VerbalizedKGRetriever:
                     if len(results) >= top_k:
                         break
 
-            # 2. Whole-word / whole-phrase containment ONLY (never partial sub-token overlap)
+            # 2. Token-level alias match for multi-word entities (handles spelling variants like Nketia/Nketiah and full names like Johnson Asiedu Nketiah)
+            if len(results) < top_k and len(cand_l.split()) >= 2:
+                cand_tokens = [stem_token(w) for w in cand_l.split()]
+                for ent_key, idx_list in self.entity_map.items():
+                    ent_tokens = [stem_token(w) for w in re.split(r"[^\w]+", ent_key) if w]
+                    if all(qt in ent_tokens for qt in cand_tokens):
+                        for idx in idx_list:
+                            h = self.heads[idx]
+                            t = self.tails[idx]
+                            pair_key = frozenset({h.lower(), t.lower()})
+                            if pair_key not in seen_pairs:
+                                seen_pairs.add(pair_key)
+                                results.append({
+                                    "sid": self.ids[idx],
+                                    "doc_id": self.doc_ids[idx],
+                                    "sentence": self.texts[idx],
+                                    "context": self.texts[idx],
+                                    "head": h,
+                                    "relation": self.relations[idx],
+                                    "tail": t,
+                                    "date": self.dates[idx],
+                                    "score": 9.5,
+                                    "matched_candidate": cand
+                                })
+                                if len(results) >= top_k:
+                                    break
+                    if len(results) >= top_k:
+                        break
+
+            # 3. Whole-word / whole-phrase containment ONLY (never partial sub-token overlap)
             if len(results) < top_k:
                 cand_re = re.compile(r"\b" + re.escape(cand_l) + r"\b")
                 for ent_key, idx_list in self.entity_map.items():
