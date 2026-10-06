@@ -139,45 +139,79 @@ class VerbalizedKGRetriever:
                 clean_title = CLEAN_DET.sub("", core).strip().lower()
                 if clean_title not in candidates:
                     candidates.insert(0, clean_title)
-                return candidates, abbrev_pairs
 
-        nlp = self._get_nlp()
-        if nlp:
-            doc = nlp(clean_q)
-            chunks = list(doc.noun_chunks)
-            i = 0
-            while i < len(chunks):
-                c1 = chunks[i]
-                c1_t = CLEAN_DET.sub("", c1.text).strip().lower()
-                if i + 1 < len(chunks):
-                    c2 = chunks[i + 1]
-                    between = doc[c1.end : c2.start]
-                    if all(t.lower_ in TITLE_CONNECTORS for t in between):
-                        c2_t = CLEAN_DET.sub("", c2.text).strip().lower()
-                        mid = " ".join(t.text.lower() for t in between)
-                        full = f"{c1_t} {mid} {c2_t}".strip()
-                        if full not in candidates:
-                            candidates.append(full)
-                        i += 2
-                        continue
-                if len(c1_t) > 2 and c1_t not in ("what", "who", "which", "how"):
-                    if c1_t not in candidates:
-                        candidates.append(c1_t)
-                i += 1
+        if not candidates:
+            nlp = self._get_nlp()
+            if nlp:
+                doc = nlp(clean_q)
+                chunks = list(doc.noun_chunks)
+                i = 0
+                while i < len(chunks):
+                    c1 = chunks[i]
+                    c1_t = CLEAN_DET.sub("", c1.text).strip().lower()
+                    if i + 1 < len(chunks):
+                        c2 = chunks[i + 1]
+                        between = doc[c1.end : c2.start]
+                        if all(t.lower_ in TITLE_CONNECTORS for t in between):
+                            c2_t = CLEAN_DET.sub("", c2.text).strip().lower()
+                            mid = " ".join(t.text.lower() for t in between)
+                            full = f"{c1_t} {mid} {c2_t}".strip()
+                            if full not in candidates:
+                                candidates.append(full)
+                            i += 2
+                            continue
+                    if len(c1_t) > 2 and c1_t not in ("what", "who", "which", "how"):
+                        if c1_t not in candidates:
+                            candidates.append(c1_t)
+                    i += 1
 
-            for ent in doc.ents:
-                if ent.label_ not in ("DATE", "TIME", "CARDINAL", "ORDINAL", "PERCENT", "QUANTITY"):
-                    et = CLEAN_DET.sub("", ent.text).strip().lower()
-                    if len(et) > 2 and et not in candidates:
-                        candidates.append(et)
-        else:
-            clean_q = re.sub(r"[^\w\s-]", " ", query).lower()
-            words = [w for w in clean_q.split() if w not in STOPWORDS and len(w) > 2]
-            for w in words:
-                if w not in candidates:
-                    candidates.append(w)
+                for ent in doc.ents:
+                    if ent.label_ not in ("DATE", "TIME", "CARDINAL", "ORDINAL", "PERCENT", "QUANTITY"):
+                        et = CLEAN_DET.sub("", ent.text).strip().lower()
+                        if len(et) > 2 and et not in candidates:
+                            candidates.append(et)
+            else:
+                clean_q = re.sub(r"[^\w\s-]", " ", query).lower()
+                words = [w for w in clean_q.split() if w not in STOPWORDS and len(w) > 2]
+                for w in words:
+                    if w not in candidates:
+                        candidates.append(w)
 
-        return candidates, abbrev_pairs
+        # Check bidirectional abbreviation aliases for EVERY candidate noun phrase
+        expanded_candidates: List[str] = []
+        resolved_abbrevs: List[Tuple[str, str]] = list(abbrev_pairs)
+
+        for p in candidates:
+            pl = p.lower().strip()
+            if pl not in expanded_candidates:
+                expanded_candidates.append(pl)
+
+            # 1. If p matches an acronym (e.g. "ndc" -> "NDC" -> "National Democratic Congress")
+            if pl.upper() in self.resolver.abbrev_map:
+                full = self.resolver.abbrev_map[pl.upper()]
+                pair = (pl.upper(), full)
+                if pair not in resolved_abbrevs:
+                    resolved_abbrevs.append(pair)
+                fl = full.lower()
+                combo = f"{fl} ({pl})"
+                for alias in [fl, combo]:
+                    if alias not in expanded_candidates:
+                        expanded_candidates.append(alias)
+
+            # 2. If p matches a full name (e.g. "national democratic congress" -> "NDC")
+            if pl in self.resolver.reverse_map:
+                abbr = self.resolver.reverse_map[pl]
+                full = self.resolver.abbrev_map[abbr]
+                pair = (abbr, full)
+                if pair not in resolved_abbrevs:
+                    resolved_abbrevs.append(pair)
+                al = abbr.lower()
+                combo = f"{pl} ({al})"
+                for alias in [al, combo]:
+                    if alias not in expanded_candidates:
+                        expanded_candidates.append(alias)
+
+        return expanded_candidates, resolved_abbrevs
 
     def retrieve(self, query: str, top_k: int = 300) -> Dict[str, Any]:
         """Strict exact noun-phrase matching with NO random fallback. Max capacity up to 300 facts."""
@@ -185,6 +219,25 @@ class VerbalizedKGRetriever:
 
         seen_pairs = set()
         results = []
+
+        # REQUIREMENT: Where abbreviations are involved, include as FIRST item:
+        # "xxx is the abbreviation of xxx" for the LLM to have in context
+        if abbrev_pairs:
+            for abbr, full in abbrev_pairs:
+                abbrev_sent = f"{abbr} is the abbreviation of {full}."
+                pair_key = frozenset({abbr.lower(), full.lower()})
+                seen_pairs.add(pair_key)
+                results.append({
+                    "sid": 999900,
+                    "doc_id": "kg_abbrev",
+                    "sentence": abbrev_sent,
+                    "context": abbrev_sent,
+                    "head": abbr,
+                    "relation": "abbreviation of",
+                    "tail": full,
+                    "score": 100.0,
+                    "matched_candidate": abbr
+                })
 
         for cand in candidates:
             cand_l = cand.strip().lower()
